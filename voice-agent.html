@@ -243,14 +243,20 @@
             };
 
             ws.onmessage = async (event) => {
-                console.log('📨 Message reçu, type:', typeof event.data, 'size:', event.data.byteLength || event.data.length);
+                const dataSize = event.data.byteLength || event.data.length || 0;
+                console.log('📨 Message reçu, type:', typeof event.data, 'size:', dataSize);
+                
                 if (typeof event.data === 'string') {
                     const message = JSON.parse(event.data);
                     console.log('📨 Message JSON:', message);
                     handleMessage(message);
+                } else if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
+                    // Audio binaire reçu
+                    const audioBuffer = event.data instanceof Blob ? await event.data.arrayBuffer() : event.data;
+                    console.log('🔊🔊🔊 AUDIO REÇU:', audioBuffer.byteLength, 'bytes');
+                    await playAudio(audioBuffer);
                 } else {
-                    console.log('🔊 Audio reçu:', event.data.byteLength, 'bytes');
-                    await playAudio(event.data);
+                    console.warn('⚠️ Type de message inconnu:', typeof event.data, event.data);
                 }
             };
 
@@ -302,19 +308,27 @@
                 return;
             }
             
-            console.log('🔊 Audio ajouté à la queue:', audioData.byteLength, 'bytes');
+            const byteLength = audioData.byteLength || audioData.length || 0;
+            console.log('🔊🔊🔊 Audio ajouté à la queue:', byteLength, 'bytes');
+            
+            if (byteLength === 0) {
+                console.warn('⚠️ Audio vide, ignoré');
+                return;
+            }
+            
             // Ajouter à la queue
             audioQueue.push(audioData);
             
             if (!isPlayingAudio) {
                 isPlayingAudio = true;
-                console.log('▶️ Démarrage de la lecture audio');
+                console.log('▶️ Démarrage de la lecture audio, queue:', audioQueue.length);
                 processAudioQueue();
             }
         }
         
         async function processAudioQueue() {
             if (audioQueue.length === 0) {
+                console.log('🔇 Queue audio vide, arrêt de la lecture');
                 isPlayingAudio = false;
                 isBotSpeaking = false;
                 if (isConversationActive) {
@@ -329,28 +343,44 @@
             micIndicatorEl.className = 'mic-indicator';
             
             const audioData = audioQueue.shift();
-            const pcm16 = new Int16Array(audioData);
-            const float32 = new Float32Array(pcm16.length);
-            for (let i = 0; i < pcm16.length; i++) {
-                float32[i] = pcm16[i] / 32768.0;
+            const byteLength = audioData.byteLength || audioData.length || 0;
+            console.log('▶️ Lecture audio chunk:', byteLength, 'bytes, reste dans queue:', audioQueue.length);
+            
+            if (byteLength === 0) {
+                console.warn('⚠️ Chunk audio vide, skip');
+                processAudioQueue();
+                return;
             }
             
-            const playContext = new (window.AudioContext || window.webkitAudioContext)({
-                sampleRate: 24000
-            });
-            
-            const audioBuffer = playContext.createBuffer(1, float32.length, 24000);
-            audioBuffer.getChannelData(0).set(float32);
-            
-            const source = playContext.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(playContext.destination);
-            source.onended = () => {
-                playContext.close();
-                // Traiter le prochain chunk
+            try {
+                const pcm16 = new Int16Array(audioData);
+                const float32 = new Float32Array(pcm16.length);
+                for (let i = 0; i < pcm16.length; i++) {
+                    float32[i] = pcm16[i] / 32768.0;
+                }
+                
+                const playContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 24000
+                });
+                
+                const audioBuffer = playContext.createBuffer(1, float32.length, 24000);
+                audioBuffer.getChannelData(0).set(float32);
+                
+                const source = playContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(playContext.destination);
+                source.onended = () => {
+                    console.log('✅ Chunk audio joué');
+                    playContext.close();
+                    // Traiter le prochain chunk
+                    processAudioQueue();
+                };
+                source.start();
+                console.log('▶️ Audio démarré, durée:', (float32.length / 24000).toFixed(2), 'secondes');
+            } catch (error) {
+                console.error('❌ Erreur lors de la lecture audio:', error);
                 processAudioQueue();
-            };
-            source.start();
+            }
         }
 
         async function toggleConversation() {

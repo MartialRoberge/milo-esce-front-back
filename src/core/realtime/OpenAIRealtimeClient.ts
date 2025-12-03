@@ -12,7 +12,7 @@ import {
  * Client WebSocket pour l'API OpenAI Realtime (GA)
  */
 export class OpenAIRealtimeClient {
-  private ws: WebSocket | null = null;
+  private _ws: WebSocket | null = null;
   private isConnected = false;
   private messageHandlers: ((event: RealtimeEvent) => void)[] = [];
   private readonly apiKey: string;
@@ -36,13 +36,13 @@ export class OpenAIRealtimeClient {
 
     return new Promise((resolve, reject) => {
       try {
-        this.ws = new WebSocket(url, {
+        this._ws = new WebSocket(url, {
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
           },
         });
 
-        this.ws.on('open', () => {
+        this._ws.on('open', () => {
           logger.info('Connexion OpenAI Realtime établie');
           this.isConnected = true;
 
@@ -56,21 +56,23 @@ export class OpenAIRealtimeClient {
           resolve();
         });
 
-        this.ws.on('message', (data: WebSocket.Data) => {
+        this._ws.on('message', (data: WebSocket.Data) => {
           try {
             if (typeof data === 'string') {
               const event: RealtimeEvent = JSON.parse(data);
+              logger.debug({ type: event.type }, 'Événement JSON reçu depuis OpenAI');
               this.handleMessage(event);
             } else {
-              // Messages binaires (pings WebSocket)
-              logger.debug({ size: Buffer.isBuffer(data) ? data.length : 'unknown' }, 'Message binaire reçu depuis OpenAI');
+              // Messages binaires (pings WebSocket ou audio)
+              const size = Buffer.isBuffer(data) ? data.length : 'unknown';
+              logger.debug({ size }, 'Message binaire reçu depuis OpenAI');
             }
           } catch (error) {
             logger.error({ error }, 'Erreur lors du parsing d\'un message OpenAI');
           }
         });
 
-        this.ws.on('error', (error) => {
+        this._ws.on('error', (error) => {
           logger.error({ error }, 'Erreur WebSocket OpenAI');
           this.isConnected = false;
           if (!this.isConnected) {
@@ -78,7 +80,7 @@ export class OpenAIRealtimeClient {
           }
         });
 
-        this.ws.on('close', (code, reason) => {
+        this._ws.on('close', (code, reason) => {
           logger.info({ code, reason: reason.toString() }, 'Connexion OpenAI Realtime fermée');
           this.isConnected = false;
         });
@@ -99,12 +101,12 @@ export class OpenAIRealtimeClient {
    * Envoie un événement JSON à OpenAI
    */
   sendEvent(event: SessionUpdateMessage | InputAudioBufferCommitMessage | any): void {
-    if (!this.ws || !this.isConnected) {
+    if (!this._ws || !this.isConnected) {
       throw new RealtimeConnectionError('Connexion OpenAI non établie');
     }
 
     const json = JSON.stringify(event);
-    this.ws.send(json);
+    this._ws.send(json);
     logger.debug({ event: event.type }, 'Événement envoyé à OpenAI');
   }
 
@@ -112,11 +114,11 @@ export class OpenAIRealtimeClient {
    * Envoie un chunk audio binaire (PCM16) à OpenAI
    */
   sendBinary(buffer: Buffer): void {
-    if (!this.ws || !this.isConnected) {
+    if (!this._ws || !this.isConnected) {
       throw new RealtimeConnectionError('Connexion OpenAI non établie');
     }
 
-    this.ws.send(buffer);
+    this._ws.send(buffer);
     logger.debug({ size: buffer.length }, 'Chunk audio envoyé à OpenAI');
   }
 
@@ -124,9 +126,9 @@ export class OpenAIRealtimeClient {
    * Ferme la connexion WebSocket
    */
   close(): void {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    if (this._ws) {
+      this._ws.close();
+      this._ws = null;
     }
     this.isConnected = false;
     this.messageHandlers = [];
@@ -136,7 +138,14 @@ export class OpenAIRealtimeClient {
    * Vérifie si la connexion est active
    */
   get connected(): boolean {
-    return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
+    return this.isConnected && this._ws?.readyState === WebSocket.OPEN;
+  }
+
+  /**
+   * Accès au WebSocket pour vérifier l'état
+   */
+  get ws(): WebSocket | null {
+    return this._ws;
   }
 
   /**

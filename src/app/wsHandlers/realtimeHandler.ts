@@ -53,22 +53,28 @@ export function realtimeHandler(ws: WebSocket): void {
    */
   function handleOpenAIEvent(event: any) {
     try {
+      logger.debug({ type: event.type }, 'Événement OpenAI reçu');
+      
       switch (event.type) {
         case 'response.output_audio_transcript.delta': {
           const deltaEvent = event as ResponseOutputAudioTranscriptDeltaEvent;
+          logger.debug({ delta: deltaEvent.delta.substring(0, 50) }, 'Transcription delta reçue');
           ws.send(JSON.stringify(createTranscriptDeltaMessage(deltaEvent.delta)));
           break;
         }
 
         case 'response.output_audio.delta': {
           const audioEvent = event as ResponseOutputAudioDeltaEvent;
+          logger.info({ deltaLength: audioEvent.delta.length }, 'Audio delta reçu depuis OpenAI');
           // Décoder le base64 et envoyer l'audio PCM16 au frontend
           const audioBuffer = Buffer.from(audioEvent.delta, 'base64');
+          logger.info({ bufferSize: audioBuffer.length }, 'Audio décodé et envoyé au frontend');
           ws.send(audioBuffer);
           break;
         }
 
         case 'response.output_audio.done': {
+          logger.info('Fin de l\'audio de réponse OpenAI');
           ws.send(JSON.stringify(createBotAudioEndMessage()));
           break;
         }
@@ -81,6 +87,10 @@ export function realtimeHandler(ws: WebSocket): void {
         }
 
         default:
+          // Logger les autres événements pour déboguer
+          if (event.type.includes('response') || event.type.includes('audio')) {
+            logger.debug({ type: event.type, event: JSON.stringify(event).substring(0, 200) }, 'Événement OpenAI non géré');
+          }
           break;
       }
     } catch (error) {
@@ -121,13 +131,24 @@ export function realtimeHandler(ws: WebSocket): void {
     try {
       // Message binaire = chunk audio PCM16
       if (Buffer.isBuffer(data) || data instanceof ArrayBuffer) {
-        if (!realtimeClient || !realtimeClient.connected) {
-          logger.warn('Tentative d\'envoi d\'audio sans session active');
+        if (!realtimeClient) {
+          logger.warn('Tentative d\'envoi d\'audio sans client Realtime');
+          return;
+        }
+        
+        if (!realtimeClient.connected) {
+          logger.warn('Tentative d\'envoi d\'audio, session non connectée. État:', realtimeClient.ws?.readyState);
+          // Réessayer de créer la session si elle est fermée
+          if (realtimeClient.ws?.readyState === WebSocket.CLOSED) {
+            logger.info('Session fermée, réinitialisation...');
+            await resetSession();
+          }
           return;
         }
 
         const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
         realtimeClient.sendBinary(buffer);
+        logger.debug({ size: buffer.length }, 'Chunk audio envoyé à OpenAI');
         return;
       }
 
