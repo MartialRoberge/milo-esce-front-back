@@ -371,41 +371,22 @@
 
                 const source = audioContext.createMediaStreamSource(mediaStream);
                 
-                // Utiliser AnalyserNode au lieu de ScriptProcessorNode (déprécié)
-                const analyser = audioContext.createAnalyser();
-                analyser.fftSize = 4096;
-                analyser.smoothingTimeConstant = 0.3;
-                source.connect(analyser);
-                
-                // NE PAS connecter à destination pour éviter l'audio en double
-                // L'audio sera seulement analysé pour VAD et envoyé au serveur
-                
-                const bufferLength = analyser.fftSize;
-                const dataArray = new Uint8Array(bufferLength);
-                
-                // Utiliser MediaRecorder pour capturer l'audio en chunks PCM16
-                const mediaRecorder = new MediaRecorder(mediaStream);
-                let audioChunks = [];
-                
-                // Fonction de traitement audio avec requestAnimationFrame
-                function processAudio() {
-                    if (!isConversationActive || isBotSpeaking) {
-                        if (animationFrameId) {
-                            cancelAnimationFrame(animationFrameId);
-                            animationFrameId = null;
-                        }
-                        return;
-                    }
+                // Utiliser ScriptProcessorNode pour capturer l'audio brut
+                // Note: déprécié mais nécessaire pour capturer les données audio brutes
+                // TODO: Migrer vers AudioWorklet pour une solution moderne
+                processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+                processor.onaudioprocess = (e) => {
+                    if (!isConversationActive || isBotSpeaking) return;
                     
-                    analyser.getByteTimeDomainData(dataArray);
+                    const inputData = e.inputBuffer.getChannelData(0);
                     
                     // Calculer le niveau audio pour VAD
                     let sum = 0;
-                    for (let i = 0; i < bufferLength; i++) {
-                        const normalized = (dataArray[i] - 128) / 128;
-                        sum += Math.abs(normalized);
+                    for (let i = 0; i < inputData.length; i++) {
+                        sum += Math.abs(inputData[i]);
                     }
-                    const audioLevel = sum / bufferLength;
+                    const audioLevel = sum / inputData.length;
                     
                     // Détection de voix (VAD)
                     if (audioLevel > vadThreshold) {
@@ -417,17 +398,10 @@
                         
                         if (silenceTimer) clearTimeout(silenceTimer);
                         
-                        // Convertir les données analyser en PCM16
-                        const chunkSize = 4096;
-                        const float32Data = new Float32Array(chunkSize);
-                        for (let i = 0; i < chunkSize && i < bufferLength; i++) {
-                            float32Data[i] = (dataArray[i] - 128) / 128;
-                        }
-                        
-                        // Convertir en PCM16
-                        const pcm16 = new Int16Array(chunkSize);
-                        for (let i = 0; i < chunkSize; i++) {
-                            const s = Math.max(-1, Math.min(1, float32Data[i]));
+                        // Convertir en PCM16 et envoyer
+                        const pcm16 = new Int16Array(inputData.length);
+                        for (let i = 0; i < inputData.length; i++) {
+                            const s = Math.max(-1, Math.min(1, inputData[i]));
                             pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                         }
                         ws.send(pcm16.buffer);
@@ -446,25 +420,11 @@
                             }
                         }
                     }
-                    
-                    animationFrameId = requestAnimationFrame(processAudio);
-                }
-                
-                processAudio();
-                
-                // Stocker les références pour cleanup
-                processor = {
-                    disconnect: () => {
-                        if (animationFrameId) {
-                            cancelAnimationFrame(animationFrameId);
-                            animationFrameId = null;
-                        }
-                        analyser.disconnect();
-                        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                            mediaRecorder.stop();
-                        }
-                    }
                 };
+
+                // Connecter source -> processor (sans destination pour éviter l'audio en double)
+                source.connect(processor);
+                // NE PAS connecter processor à destination pour éviter l'audio en double
 
                 isConversationActive = true;
                 toggleBtn.textContent = 'Arrêter la conversation';
