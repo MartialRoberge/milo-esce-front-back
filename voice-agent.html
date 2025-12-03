@@ -398,7 +398,23 @@
                 processor = audioContext.createScriptProcessor(4096, 1, 1);
 
                 processor.onaudioprocess = (e) => {
-                    if (!isConversationActive || isBotSpeaking) return;
+                    audioProcessCount++;
+                    
+                    // Log initial pour confirmer que le processeur fonctionne
+                    if (audioProcessCount === 1) {
+                        console.log('✅ ScriptProcessorNode actif, traitement audio démarré');
+                    }
+                    
+                    if (!isConversationActive) {
+                        if (audioProcessCount % 1000 === 0) {
+                            console.log('⚠️ Conversation inactive, audio ignoré');
+                        }
+                        return;
+                    }
+                    
+                    if (isBotSpeaking) {
+                        return;
+                    }
                     
                     const inputData = e.inputBuffer.getChannelData(0);
                     
@@ -409,16 +425,15 @@
                     }
                     const audioLevel = sum / inputData.length;
                     
-                    // Log périodique pour déboguer
-                    audioProcessCount++;
-                    if (audioProcessCount % 100 === 0) {
-                        console.log('🔊 Niveau audio:', audioLevel.toFixed(6), 'Seuil:', vadThreshold);
+                    // Log périodique pour déboguer (toutes les 200 frames = ~4 secondes)
+                    if (audioProcessCount % 200 === 0) {
+                        console.log('🔊 Niveau audio:', audioLevel.toFixed(6), 'Seuil:', vadThreshold, 'Détection:', audioLevel > vadThreshold ? '✅' : '❌');
                     }
                     
-                    // Détection de voix (VAD)
+                    // Détection de voix (VAD) - seuil plus bas
                     if (audioLevel > vadThreshold) {
                         if (!isListening) {
-                            console.log('🎤 Voix détectée ! Niveau:', audioLevel.toFixed(4), 'Seuil:', vadThreshold);
+                            console.log('🎤🎤🎤 VOIX DÉTECTÉE ! Niveau:', audioLevel.toFixed(4), 'Seuil:', vadThreshold);
                             isListening = true;
                             updateStatus('listening', '🎤 Vous parlez...');
                             micIndicatorEl.className = 'mic-indicator active';
@@ -435,11 +450,11 @@
                         
                         if (ws && ws.readyState === WebSocket.OPEN) {
                             ws.send(pcm16.buffer);
-                            if (audioProcessCount % 50 === 0) {
-                                console.log('📤 Audio envoyé:', pcm16.length, 'samples');
+                            if (audioProcessCount % 100 === 0) {
+                                console.log('📤 Audio envoyé:', pcm16.length, 'samples, niveau:', audioLevel.toFixed(4));
                             }
                         } else {
-                            console.warn('⚠️ WebSocket non prêt pour envoyer audio');
+                            console.warn('⚠️ WebSocket non prêt pour envoyer audio, état:', ws ? ws.readyState : 'null');
                         }
                         
                         silenceTimer = setTimeout(() => {
@@ -458,9 +473,17 @@
                     }
                 };
 
-                // Connecter source -> processor (sans destination pour éviter l'audio en double)
+                // Connecter source -> processor
+                // IMPORTANT: ScriptProcessorNode DOIT être connecté à destination pour fonctionner
+                // Mais on met le gain à 0 pour éviter l'audio en double
+                const gainNode = audioContext.createGain();
+                gainNode.gain.value = 0; // Volume à 0 pour éviter l'audio en double
+                
                 source.connect(processor);
-                // NE PAS connecter processor à destination pour éviter l'audio en double
+                processor.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                console.log('🔗 ScriptProcessorNode connecté (gain à 0 pour éviter feedback)');
 
                 isConversationActive = true;
                 toggleBtn.textContent = 'Arrêter la conversation';
