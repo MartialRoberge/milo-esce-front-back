@@ -3,24 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCTI - Voice Agent</title>
+    <title>OCTI - Voice Agent Complet</title>
     <script type="module">
         import { 
             RealtimeAgent, 
             RealtimeSession,
-            RealtimeOutputGuardrail 
+            RealtimeOutputGuardrail,
+            tool,
+            RealtimeContextData
         } from 'https://cdn.jsdelivr.net/npm/@openai/agents-realtime@latest/dist/index.js';
+        import { z } from 'https://cdn.jsdelivr.net/npm/zod@3/dist/index.js';
 
         const statusEl = document.getElementById('status');
         const toggleBtn = document.getElementById('toggleBtn');
         const interruptBtn = document.getElementById('interruptBtn');
+        const textInput = document.getElementById('textInput');
+        const sendTextBtn = document.getElementById('sendTextBtn');
         const transcriptEl = document.getElementById('transcript');
         const micIndicatorEl = document.getElementById('micIndicator');
         const infoEl = document.getElementById('info');
         const historyEl = document.getElementById('history');
+        const toolApprovalEl = document.getElementById('toolApproval');
+        const toolApprovalName = document.getElementById('toolApprovalName');
+        const toolApprovalArgs = document.getElementById('toolApprovalArgs');
+        const approveBtn = document.getElementById('approveBtn');
+        const rejectBtn = document.getElementById('rejectBtn');
 
         let session = null;
         let isConnected = false;
+        let currentToolRequest = null;
+
+        // Outil exemple : obtenir des informations sur l'ESCE
+        const getESCEInfo = tool({
+            name: 'get_esce_info',
+            description: 'Obtenir des informations sur l\'ESCE, ses formations, ses valeurs ou ses atouts',
+            parameters: z.object({ 
+                topic: z.string().describe('Le sujet d\'information demandé (formations, valeurs, atouts, etc.)')
+            }),
+            async execute({ topic }) {
+                // Simuler une réponse basée sur le sujet
+                const info = {
+                    'formations': 'L\'ESCE propose des programmes en commerce international, marketing, finance, et management.',
+                    'valeurs': 'L\'ESCE valorise l\'excellence académique, l\'ouverture internationale, et l\'innovation.',
+                    'atouts': 'L\'ESCE se distingue par son réseau international, ses partenariats entreprises, et son accompagnement personnalisé.',
+                };
+                return info[topic.toLowerCase()] || `Information sur ${topic} : L'ESCE est une grande école de commerce reconnue.`;
+            },
+        });
+
+        // Agent spécialisé pour les questions sur les admissions
+        const admissionsAgent = new RealtimeAgent({
+            name: 'Admissions Specialist',
+            handoffDescription: 'Spécialiste des questions sur les admissions, les prérequis et les procédures d\'inscription',
+            instructions: 'Tu es un spécialiste des admissions à l\'ESCE. Tu réponds aux questions sur les prérequis, les dates d\'inscription, les dossiers à fournir, et les processus d\'admission. Sois précis et rassurant.',
+        });
+
+        // Garde-fous
+        const guardrails = [
+            {
+                name: 'No inappropriate content',
+                async execute({ agentOutput }) {
+                    const inappropriateWords = ['test', 'badword'];
+                    const hasInappropriate = inappropriateWords.some(word => 
+                        agentOutput.toLowerCase().includes(word.toLowerCase())
+                    );
+                    return {
+                        tripwireTriggered: hasInappropriate,
+                        outputInfo: { hasInappropriate },
+                    };
+                },
+            },
+        ];
 
         async function getClientSecret() {
             try {
@@ -43,23 +96,6 @@
             }
         }
 
-        // Garde-fous pour protéger les réponses
-        const guardrails = [
-            {
-                name: 'No inappropriate content',
-                async execute({ agentOutput }) {
-                    const inappropriateWords = ['test', 'badword']; // Ajoutez vos mots interdits
-                    const hasInappropriate = inappropriateWords.some(word => 
-                        agentOutput.toLowerCase().includes(word.toLowerCase())
-                    );
-                    return {
-                        tripwireTriggered: hasInappropriate,
-                        outputInfo: { hasInappropriate },
-                    };
-                },
-            },
-        ];
-
         async function toggleConversation() {
             if (!isConnected) {
                 await startConversation();
@@ -75,6 +111,16 @@
             }
         }
 
+        function handleSendText() {
+            const text = textInput.value.trim();
+            if (text && session && isConnected) {
+                session.sendMessage(text);
+                updateTranscript('user', text);
+                textInput.value = '';
+                infoEl.textContent = 'Message texte envoyé';
+            }
+        }
+
         async function startConversation() {
             try {
                 infoEl.textContent = 'Génération de la clé éphémère...';
@@ -85,15 +131,16 @@
                 
                 infoEl.textContent = 'Création de l\'agent...';
                 
-                // Créer l'agent OCTI avec instructions
+                // Créer l'agent OCTI avec outils et transferts
                 const agent = new RealtimeAgent({
                     name: 'OCTI',
-                    instructions: 'Tu es OCTI, l\'assistant vocal intelligent des Journées Portes Ouvertes de l\'ESCE. Tu es là pour répondre aux questions des étudiants et prospects de manière chaleureuse, professionnelle et informative. Tu connais parfaitement l\'école, ses formations, ses valeurs et ses atouts. Réponds toujours de manière concise et claire.',
+                    instructions: 'Tu es OCTI, l\'assistant vocal intelligent des Journées Portes Ouvertes de l\'ESCE. Tu es là pour répondre aux questions des étudiants et prospects de manière chaleureuse, professionnelle et informative. Tu connais parfaitement l\'école, ses formations, ses valeurs et ses atouts. Réponds toujours de manière concise et claire. Si on te pose des questions sur les admissions, transfère à l\'agent spécialisé.',
+                    tools: [getESCEInfo],
+                    handoffs: [admissionsAgent],
                 });
 
                 infoEl.textContent = 'Création de la session...';
                 
-                // Créer la session avec configuration complète
                 session = new RealtimeSession(agent, {
                     model: 'gpt-realtime',
                     config: {
@@ -102,7 +149,6 @@
                         inputAudioTranscription: {
                             model: 'gpt-4o-mini-transcribe',
                         },
-                        // Détection de tour de parole
                         turnDetection: {
                             type: 'semantic_vad',
                             eagerness: 'medium',
@@ -110,39 +156,57 @@
                             interruptResponse: true,
                         },
                     },
-                    // Garde-fous
                     outputGuardrails: guardrails,
                     outputGuardrailSettings: {
-                        debounceTextLength: 100, // Vérifier tous les 100 caractères
+                        debounceTextLength: 100,
                     },
                 });
 
-                // Écouter les événements de transcription
+                // Événements de transcription
                 session.on('response.output_audio_transcript.delta', (event) => {
                     updateTranscript('bot', event.delta, true);
                 });
 
-                // Écouter les interruptions
+                // Interruptions
                 session.on('audio_interrupted', () => {
                     updateStatus('listening', '🎤 Interrompu - Écoute...');
                     micIndicatorEl.className = 'mic-indicator listening';
                 });
 
-                // Écouter les garde-fous déclenchés
+                // Garde-fous
                 session.on('guardrail_tripped', (event) => {
                     console.warn('Garde-fou déclenché:', event);
                     infoEl.textContent = '⚠️ Contenu inapproprié détecté et bloqué';
                 });
 
-                // Écouter les mises à jour de l'historique
+                // Historique
                 session.on('history_updated', (history) => {
                     updateHistoryDisplay(history);
                 });
 
-                // Écouter les événements de début/fin de réponse
+                // Fin de réponse audio
                 session.on('response.output_audio.done', () => {
                     updateStatus('listening', '🎤 Écoute... Parlez maintenant');
                     micIndicatorEl.className = 'mic-indicator listening';
+                });
+
+                // Approbation d'outils
+                session.on('tool_approval_requested', (_context, _agent, request) => {
+                    currentToolRequest = request;
+                    toolApprovalName.textContent = request.rawItem.name || 'Outil inconnu';
+                    toolApprovalArgs.textContent = JSON.stringify(request.rawItem.arguments || {}, null, 2);
+                    toolApprovalEl.style.display = 'block';
+                    infoEl.textContent = '⏳ Approbation d\'outil requise';
+                });
+
+                // Exécution d'outil
+                session.on('tool_call', (event) => {
+                    infoEl.textContent = `🔧 Exécution de l'outil: ${event.name}`;
+                });
+
+                // Transfert d'agent
+                session.on('agent_handoff', (event) => {
+                    infoEl.textContent = `🔄 Transfert vers: ${event.agent.name}`;
                 });
 
                 infoEl.textContent = 'Connexion au serveur...';
@@ -154,9 +218,11 @@
                 toggleBtn.textContent = 'Arrêter la conversation';
                 toggleBtn.classList.add('active');
                 interruptBtn.disabled = false;
+                sendTextBtn.disabled = false;
+                textInput.disabled = false;
                 updateStatus('listening', '🎤 Écoute... Parlez maintenant');
                 micIndicatorEl.className = 'mic-indicator listening';
-                infoEl.textContent = '✅ Connecté ! Parlez naturellement, je détecte automatiquement votre voix';
+                infoEl.textContent = '✅ Connecté ! Parlez naturellement ou utilisez la saisie texte';
                 transcriptEl.innerHTML = '<div class="status-text">Conversation démarrée. Parlez maintenant...</div>';
 
             } catch (error) {
@@ -177,10 +243,32 @@
             toggleBtn.textContent = 'Démarrer la conversation';
             toggleBtn.classList.remove('active');
             interruptBtn.disabled = true;
+            sendTextBtn.disabled = true;
+            textInput.disabled = true;
+            toolApprovalEl.style.display = 'none';
+            currentToolRequest = null;
             updateStatus('idle', '⚠️ Déconnecté');
             micIndicatorEl.className = 'mic-indicator';
             infoEl.textContent = 'Conversation arrêtée. Cliquez pour redémarrer.';
             historyEl.innerHTML = '';
+        }
+
+        function approveTool() {
+            if (session && currentToolRequest) {
+                session.approve(currentToolRequest.approvalItem);
+                toolApprovalEl.style.display = 'none';
+                currentToolRequest = null;
+                infoEl.textContent = '✅ Outil approuvé';
+            }
+        }
+
+        function rejectTool() {
+            if (session && currentToolRequest) {
+                session.reject(currentToolRequest.rawItem);
+                toolApprovalEl.style.display = 'none';
+                currentToolRequest = null;
+                infoEl.textContent = '❌ Outil rejeté';
+            }
         }
 
         function updateStatus(type, text) {
@@ -196,7 +284,6 @@
             const entry = document.createElement('div');
             entry.className = speaker;
             
-            // Si c'est un delta, on ajoute au dernier élément bot s'il existe
             if (speaker === 'bot' && append) {
                 const lastEntry = transcriptEl.querySelector('.bot:last-child');
                 if (lastEntry) {
@@ -225,9 +312,11 @@
                 if (item.type === 'message') {
                     const role = item.role === 'user' ? '👤 Vous' : '🤖 OCTI';
                     const content = item.content?.[0]?.text || item.content?.[0]?.transcript || '...';
-                    entry.innerHTML = `<strong>${role}:</strong> ${content}`;
+                    entry.innerHTML = `<strong>${role}:</strong> ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`;
                 } else if (item.type === 'function_call') {
                     entry.innerHTML = `<em>🔧 Appel d'outil: ${item.name}</em>`;
+                } else if (item.type === 'function_output') {
+                    entry.innerHTML = `<em>✅ Résultat: ${String(item.output).substring(0, 50)}...</em>`;
                 }
                 
                 historyEl.appendChild(entry);
@@ -238,6 +327,14 @@
 
         toggleBtn.addEventListener('click', toggleConversation);
         interruptBtn.addEventListener('click', handleInterrupt);
+        sendTextBtn.addEventListener('click', handleSendText);
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleSendText();
+            }
+        });
+        approveBtn.addEventListener('click', approveTool);
+        rejectBtn.addEventListener('click', rejectTool);
     </script>
     <style>
         * {
@@ -259,7 +356,7 @@
             padding: 40px;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 800px;
+            max-width: 900px;
             width: 100%;
             text-align: center;
         }
@@ -328,6 +425,32 @@
         .button.secondary {
             background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
         }
+        .button.success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+        .button.danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+        .text-input-container {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .text-input {
+            flex: 1;
+            padding: 12px 20px;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+        }
+        .text-input:focus {
+            border-color: #667eea;
+        }
+        .text-input:disabled {
+            background: #f8f9fa;
+            cursor: not-allowed;
+        }
         .transcript {
             background: #f8f9fa;
             border: 2px solid #e9ecef;
@@ -373,6 +496,27 @@
             background: white;
             border-radius: 5px;
         }
+        .tool-approval {
+            display: none;
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .tool-approval h3 {
+            color: #856404;
+            margin-bottom: 15px;
+        }
+        .tool-approval-info {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
         .mic-indicator {
             width: 80px;
             height: 80px;
@@ -408,7 +552,7 @@
 <body>
     <div class="container">
         <h1>🎙️ OCTI</h1>
-        <p class="subtitle">Assistant vocal intelligent - SDK Agents complet</p>
+        <p class="subtitle">Assistant vocal intelligent - SDK Agents complet avec outils et transferts</p>
         
         <div id="status" class="status idle">
             ⚠️ Déconnecté
@@ -423,6 +567,32 @@
             <button id="interruptBtn" class="button secondary" disabled>
                 ⏹️ Interrompre
             </button>
+        </div>
+
+        <div class="text-input-container">
+            <input 
+                type="text" 
+                id="textInput" 
+                class="text-input" 
+                placeholder="Ou tapez votre message ici..."
+                disabled
+            />
+            <button id="sendTextBtn" class="button" disabled>
+                📤 Envoyer
+            </button>
+        </div>
+
+        <div class="tool-approval" id="toolApproval">
+            <h3>⚠️ Approbation d'outil requise</h3>
+            <p><strong>Outil:</strong> <span id="toolApprovalName"></span></p>
+            <div class="tool-approval-info">
+                <strong>Arguments:</strong>
+                <pre id="toolApprovalArgs"></pre>
+            </div>
+            <div class="buttons-container">
+                <button id="approveBtn" class="button success">✅ Approuver</button>
+                <button id="rejectBtn" class="button danger">❌ Rejeter</button>
+            </div>
         </div>
         
         <div class="transcript" id="transcript">
