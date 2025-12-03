@@ -5,13 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OCTI - Voice Agent</title>
     <script type="module">
-        import { RealtimeAgent, RealtimeSession } from 'https://cdn.jsdelivr.net/npm/@openai/agents-realtime@latest/dist/index.js';
+        import { 
+            RealtimeAgent, 
+            RealtimeSession,
+            RealtimeOutputGuardrail 
+        } from 'https://cdn.jsdelivr.net/npm/@openai/agents-realtime@latest/dist/index.js';
 
         const statusEl = document.getElementById('status');
         const toggleBtn = document.getElementById('toggleBtn');
+        const interruptBtn = document.getElementById('interruptBtn');
         const transcriptEl = document.getElementById('transcript');
         const micIndicatorEl = document.getElementById('micIndicator');
         const infoEl = document.getElementById('info');
+        const historyEl = document.getElementById('history');
 
         let session = null;
         let isConnected = false;
@@ -37,11 +43,35 @@
             }
         }
 
+        // Garde-fous pour protéger les réponses
+        const guardrails = [
+            {
+                name: 'No inappropriate content',
+                async execute({ agentOutput }) {
+                    const inappropriateWords = ['test', 'badword']; // Ajoutez vos mots interdits
+                    const hasInappropriate = inappropriateWords.some(word => 
+                        agentOutput.toLowerCase().includes(word.toLowerCase())
+                    );
+                    return {
+                        tripwireTriggered: hasInappropriate,
+                        outputInfo: { hasInappropriate },
+                    };
+                },
+            },
+        ];
+
         async function toggleConversation() {
             if (!isConnected) {
                 await startConversation();
             } else {
                 stopConversation();
+            }
+        }
+
+        function handleInterrupt() {
+            if (session && isConnected) {
+                session.interrupt();
+                updateStatus('listening', '🎤 Interruption...');
             }
         }
 
@@ -54,14 +84,65 @@
                 const clientSecret = await getClientSecret();
                 
                 infoEl.textContent = 'Création de l\'agent...';
+                
+                // Créer l'agent OCTI avec instructions
                 const agent = new RealtimeAgent({
                     name: 'OCTI',
-                    instructions: 'Tu es OCTI, l\'assistant vocal intelligent des Journées Portes Ouvertes de l\'ESCE. Tu es là pour répondre aux questions des étudiants et prospects de manière chaleureuse, professionnelle et informative.',
+                    instructions: 'Tu es OCTI, l\'assistant vocal intelligent des Journées Portes Ouvertes de l\'ESCE. Tu es là pour répondre aux questions des étudiants et prospects de manière chaleureuse, professionnelle et informative. Tu connais parfaitement l\'école, ses formations, ses valeurs et ses atouts. Réponds toujours de manière concise et claire.',
                 });
 
                 infoEl.textContent = 'Création de la session...';
+                
+                // Créer la session avec configuration complète
                 session = new RealtimeSession(agent, {
                     model: 'gpt-realtime',
+                    config: {
+                        inputAudioFormat: 'pcm16',
+                        outputAudioFormat: 'pcm16',
+                        inputAudioTranscription: {
+                            model: 'gpt-4o-mini-transcribe',
+                        },
+                        // Détection de tour de parole
+                        turnDetection: {
+                            type: 'semantic_vad',
+                            eagerness: 'medium',
+                            createResponse: true,
+                            interruptResponse: true,
+                        },
+                    },
+                    // Garde-fous
+                    outputGuardrails: guardrails,
+                    outputGuardrailSettings: {
+                        debounceTextLength: 100, // Vérifier tous les 100 caractères
+                    },
+                });
+
+                // Écouter les événements de transcription
+                session.on('response.output_audio_transcript.delta', (event) => {
+                    updateTranscript('bot', event.delta, true);
+                });
+
+                // Écouter les interruptions
+                session.on('audio_interrupted', () => {
+                    updateStatus('listening', '🎤 Interrompu - Écoute...');
+                    micIndicatorEl.className = 'mic-indicator listening';
+                });
+
+                // Écouter les garde-fous déclenchés
+                session.on('guardrail_tripped', (event) => {
+                    console.warn('Garde-fou déclenché:', event);
+                    infoEl.textContent = '⚠️ Contenu inapproprié détecté et bloqué';
+                });
+
+                // Écouter les mises à jour de l'historique
+                session.on('history_updated', (history) => {
+                    updateHistoryDisplay(history);
+                });
+
+                // Écouter les événements de début/fin de réponse
+                session.on('response.output_audio.done', () => {
+                    updateStatus('listening', '🎤 Écoute... Parlez maintenant');
+                    micIndicatorEl.className = 'mic-indicator listening';
                 });
 
                 infoEl.textContent = 'Connexion au serveur...';
@@ -72,16 +153,11 @@
                 isConnected = true;
                 toggleBtn.textContent = 'Arrêter la conversation';
                 toggleBtn.classList.add('active');
-                statusEl.className = 'status listening';
-                statusEl.textContent = '🎤 Écoute... Parlez maintenant';
+                interruptBtn.disabled = false;
+                updateStatus('listening', '🎤 Écoute... Parlez maintenant');
                 micIndicatorEl.className = 'mic-indicator listening';
                 infoEl.textContent = '✅ Connecté ! Parlez naturellement, je détecte automatiquement votre voix';
                 transcriptEl.innerHTML = '<div class="status-text">Conversation démarrée. Parlez maintenant...</div>';
-
-                // Écouter les événements de transcription
-                session.on('response.output_audio_transcript.delta', (event) => {
-                    updateTranscript('bot', event.delta, true);
-                });
 
             } catch (error) {
                 console.error('Erreur:', error);
@@ -100,10 +176,16 @@
             isConnected = false;
             toggleBtn.textContent = 'Démarrer la conversation';
             toggleBtn.classList.remove('active');
-            statusEl.className = 'status idle';
-            statusEl.textContent = '⚠️ Déconnecté';
+            interruptBtn.disabled = true;
+            updateStatus('idle', '⚠️ Déconnecté');
             micIndicatorEl.className = 'mic-indicator';
             infoEl.textContent = 'Conversation arrêtée. Cliquez pour redémarrer.';
+            historyEl.innerHTML = '';
+        }
+
+        function updateStatus(type, text) {
+            statusEl.className = `status ${type}`;
+            statusEl.textContent = text;
         }
 
         function updateTranscript(speaker, text, append = false) {
@@ -113,12 +195,49 @@
             
             const entry = document.createElement('div');
             entry.className = speaker;
+            
+            // Si c'est un delta, on ajoute au dernier élément bot s'il existe
+            if (speaker === 'bot' && append) {
+                const lastEntry = transcriptEl.querySelector('.bot:last-child');
+                if (lastEntry) {
+                    lastEntry.textContent = `🤖 OCTI: ${lastEntry.textContent.replace('🤖 OCTI: ', '')}${text}`;
+                    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+                    return;
+                }
+            }
+            
             entry.textContent = speaker === 'user' ? `👤 Vous: ${text}` : `🤖 OCTI: ${text}`;
             transcriptEl.appendChild(entry);
             transcriptEl.scrollTop = transcriptEl.scrollHeight;
         }
 
+        function updateHistoryDisplay(history) {
+            if (!history || history.length === 0) {
+                historyEl.innerHTML = '<div class="status-text">Aucun historique</div>';
+                return;
+            }
+
+            historyEl.innerHTML = '';
+            history.forEach((item, index) => {
+                const entry = document.createElement('div');
+                entry.className = 'history-entry';
+                
+                if (item.type === 'message') {
+                    const role = item.role === 'user' ? '👤 Vous' : '🤖 OCTI';
+                    const content = item.content?.[0]?.text || item.content?.[0]?.transcript || '...';
+                    entry.innerHTML = `<strong>${role}:</strong> ${content}`;
+                } else if (item.type === 'function_call') {
+                    entry.innerHTML = `<em>🔧 Appel d'outil: ${item.name}</em>`;
+                }
+                
+                historyEl.appendChild(entry);
+            });
+            
+            historyEl.scrollTop = historyEl.scrollHeight;
+        }
+
         toggleBtn.addEventListener('click', toggleConversation);
+        interruptBtn.addEventListener('click', handleInterrupt);
     </script>
     <style>
         * {
@@ -140,7 +259,7 @@
             padding: 40px;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 600px;
+            max-width: 800px;
             width: 100%;
             text-align: center;
         }
@@ -181,18 +300,17 @@
             50% { opacity: 0.7; }
         }
         .button {
-            padding: 20px 40px;
-            margin: 10px;
+            padding: 15px 30px;
+            margin: 5px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
             border-radius: 50px;
             cursor: pointer;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
             transition: all 0.3s;
             box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-            min-width: 200px;
         }
         .button:hover:not(:disabled) {
             transform: translateY(-2px);
@@ -207,13 +325,18 @@
             background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
             box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
         }
+        .button.secondary {
+            background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+        }
         .transcript {
             background: #f8f9fa;
             border: 2px solid #e9ecef;
             border-radius: 10px;
             padding: 20px;
             margin: 20px 0;
-            min-height: 100px;
+            min-height: 150px;
+            max-height: 300px;
+            overflow-y: auto;
             text-align: left;
             font-size: 16px;
             line-height: 1.6;
@@ -231,6 +354,24 @@
             font-style: italic;
             text-align: center;
             padding: 20px;
+        }
+        .history {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            min-height: 100px;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+            font-size: 14px;
+        }
+        .history-entry {
+            margin-bottom: 8px;
+            padding: 8px;
+            background: white;
+            border-radius: 5px;
         }
         .mic-indicator {
             width: 80px;
@@ -256,12 +397,18 @@
             color: #004085;
             font-size: 14px;
         }
+        .buttons-container {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎙️ OCTI</h1>
-        <p class="subtitle">Assistant vocal intelligent - SDK Agents</p>
+        <p class="subtitle">Assistant vocal intelligent - SDK Agents complet</p>
         
         <div id="status" class="status idle">
             ⚠️ Déconnecté
@@ -269,12 +416,24 @@
         
         <div class="mic-indicator" id="micIndicator">🎤</div>
         
-        <button id="toggleBtn" class="button">
-            Démarrer la conversation
-        </button>
+        <div class="buttons-container">
+            <button id="toggleBtn" class="button">
+                Démarrer la conversation
+            </button>
+            <button id="interruptBtn" class="button secondary" disabled>
+                ⏹️ Interrompre
+            </button>
+        </div>
         
         <div class="transcript" id="transcript">
             <div class="status-text">Cliquez sur "Démarrer la conversation" pour commencer...</div>
+        </div>
+        
+        <div>
+            <h3 style="text-align: left; margin-bottom: 10px; font-size: 14px; color: #666;">📜 Historique de la conversation</h3>
+            <div class="history" id="history">
+                <div class="status-text">Aucun historique</div>
+            </div>
         </div>
         
         <div class="info" id="info">
@@ -283,4 +442,3 @@
     </div>
 </body>
 </html>
-
