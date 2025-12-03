@@ -4,6 +4,7 @@ import { logger } from '../../config/logger';
 import { SessionError } from '../../utils/errors';
 import { AgentConfig } from '../agents/AgentConfig';
 import { RealtimeSessionConfig } from '../realtime/types';
+import { ragSearchTool } from '../tools/ragSearchTool';
 
 /**
  * Gestionnaire de sessions Realtime
@@ -50,6 +51,8 @@ export class SessionManager {
         : {
             instructions: agentConfig.systemPrompt,
           }),
+      // Ajouter le tool RAG si Pinecone est configuré
+      ...(envConfig.pineconeApiKey ? { tools: [ragSearchTool] } : {}),
     };
     
     logger.debug({ sessionConfig }, 'Configuration de session créée');

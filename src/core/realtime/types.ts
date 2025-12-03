@@ -17,6 +17,7 @@ export type RealtimeEventType =
   | 'response.output_audio_transcript.done'
   | 'response.output_audio.delta'
   | 'response.output_audio.done'
+  | 'response.output_item.done'
   | 'response.done'
   | 'error';
 
@@ -67,6 +68,17 @@ export interface ErrorEvent extends RealtimeEvent {
  * Configuration de session pour OpenAI Realtime (GA)
  * Structure exacte selon la documentation officielle
  */
+export interface RealtimeTool {
+  type: 'function';
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, any>;
+    required?: string[];
+  };
+}
+
 export interface RealtimeSessionConfig {
   type: 'realtime'; // Requis
   model?: string;
@@ -94,6 +106,7 @@ export interface RealtimeSessionConfig {
     variables?: Record<string, any>;
   };
   instructions?: string; // Peut être utilisé en plus du prompt
+  tools?: RealtimeTool[]; // Tools pour function calling
 }
 
 /**

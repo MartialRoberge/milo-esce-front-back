@@ -15,6 +15,7 @@ import {
   ResponseOutputAudioTranscriptDeltaEvent,
   ErrorEvent,
 } from '../../core/realtime/types';
+import { searchDocuments } from '../../core/tools/ragSearchTool';
 
 /**
  * Gère une connexion WebSocket client pour le service Realtime
@@ -27,10 +28,12 @@ export function realtimeHandler(ws: WebSocket): void {
 
   /**
    * Initialise la session Realtime
+   * La voix change automatiquement à chaque nouvelle session grâce à la rotation
    */
   async function initializeSession() {
     try {
       const agentConfig = getOctiAgentConfig();
+      logger.info({ voice: agentConfig.voice }, 'Création de session avec voix');
       realtimeClient = await SessionManager.createOctiSession(agentConfig);
 
       // Configurer les handlers pour les événements OpenAI
@@ -98,6 +101,52 @@ export function realtimeHandler(ws: WebSocket): void {
 
         case 'response.done': {
           logger.info('✅ Réponse complète terminée');
+          break;
+        }
+
+        case 'response.output_item.done': {
+          // Gérer les tool calls
+          if (event.output_item?.type === 'function_call' && event.output_item?.function_call) {
+            const functionCall = event.output_item.function_call;
+            logger.info({ functionName: functionCall.name }, '🔧 Tool call détecté');
+            
+            if (functionCall.name === 'search_esce_documents' && functionCall.arguments) {
+              // Exécuter la recherche de manière asynchrone
+              (async () => {
+                try {
+                  const args = typeof functionCall.arguments === 'string' 
+                    ? JSON.parse(functionCall.arguments) 
+                    : functionCall.arguments;
+                  
+                  const query = args.query;
+                  logger.info({ query }, '🔍 Recherche RAG demandée');
+                  
+                  // Exécuter la recherche
+                  const context = await searchDocuments(query);
+                  
+                  // Envoyer le résultat via conversation.item.create
+                  if (realtimeClient && context) {
+                    realtimeClient.sendEvent({
+                      type: 'conversation.item.create',
+                      item: {
+                        type: 'message',
+                        role: 'user',
+                        content: [
+                          {
+                            type: 'input_text',
+                            text: `Contexte trouvé dans les documents ESCE:\n\n${context}`,
+                          },
+                        ],
+                      },
+                    });
+                    logger.info({ contextLength: context.length }, '✅ Contexte RAG injecté dans la conversation');
+                  }
+                } catch (error) {
+                  logger.error({ error }, '❌ Erreur lors de l\'exécution du tool RAG');
+                }
+              })();
+            }
+          }
           break;
         }
 

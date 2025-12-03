@@ -13,6 +13,8 @@ export interface EnvConfig {
   octiSystemPrompt: string;
   octiPromptId?: string; // ID du prompt OpenAI (optionnel)
   octiDefaultVoice: string;
+  pineconeApiKey?: string; // Optionnel pour RAG
+  pineconeIndexName?: string; // Optionnel pour RAG
 }
 
 /**
@@ -25,7 +27,7 @@ export function getEnvConfig(): EnvConfig {
   const openaiRealtimeModel = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime';
   const octiSystemPrompt = process.env.OCTI_SYSTEM_PROMPT;
   const octiPromptId = process.env.OCTI_PROMPT_ID; // Optionnel
-  const octiDefaultVoice = process.env.OCTI_DEFAULT_VOICE || 'alloy';
+  const octiDefaultVoice = process.env.OCTI_DEFAULT_VOICE || 'verse';
 
   if (!openaiApiKey) {
     throw new Error('OPENAI_API_KEY est requis dans les variables d\'environnement');
@@ -44,5 +46,7 @@ export function getEnvConfig(): EnvConfig {
     octiSystemPrompt: octiSystemPrompt || '',
     octiPromptId,
     octiDefaultVoice,
+    pineconeApiKey: process.env.PINECONE_API_KEY,
+    pineconeIndexName: process.env.PINECONE_INDEX_NAME || 'esce-documents',
   };
 }
