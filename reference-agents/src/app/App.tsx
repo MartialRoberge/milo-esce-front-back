@@ -217,6 +217,8 @@ function App() {
 
         const companyName = agentSetKey === 'customerServiceRetail'
           ? customerServiceRetailCompanyName
+          : agentSetKey === 'octi'
+          ? 'ESCE'
           : chatSupervisorCompanyName;
         const guardrail = createModerationGuardrail(companyName);
 
