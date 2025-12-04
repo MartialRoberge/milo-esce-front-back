@@ -27,8 +27,8 @@ yarn-error.log*
 .idea/
 *.iml
 
-# Référence OpenAI Agents (repo externe, non inclus)
-reference-agents/
+# Référence OpenAI Agents - maintenant inclus pour le déploiement
+# reference-agents/
 docs/reference-agents/
 
 # Fichiers temporaires
