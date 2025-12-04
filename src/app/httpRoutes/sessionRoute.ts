@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { getEnvConfig } from '../../config/env';
 import { logger } from '../../config/logger';
 import { ragSearchTool } from '../../core/tools/ragSearchTool';
-import { getOctiAgentConfig } from '../../core/agents/octiAgent';
 
 const router = Router();
 
@@ -25,19 +24,12 @@ router.get('/session', async (_req: Request, res: Response) => {
 
     logger.info('Création d\'une session éphémère OpenAI Realtime');
 
-        // Récupérer la configuration OKTI pour les instructions
-        const agentConfig = getOctiAgentConfig();
-        
-        // Préparer le body avec les instructions OKTI et les tools RAG si Pinecone est configuré
+        // Préparer le body avec les tools RAG si Pinecone est configuré
         const sessionBody: {
           model: string;
-          instructions?: string;
-          voice?: string;
           tools?: typeof ragSearchTool[];
         } = {
           model: config.openaiRealtimeModel || 'gpt-realtime',
-          instructions: agentConfig.systemPrompt,
-          voice: agentConfig.voice,
         };
 
         // Ajouter le tool RAG si Pinecone est configuré
@@ -45,8 +37,6 @@ router.get('/session', async (_req: Request, res: Response) => {
           sessionBody.tools = [ragSearchTool];
           logger.info('Tool RAG ajouté à la session éphémère');
         }
-        
-        logger.info('Instructions OKTI ajoutées à la session éphémère');
 
         const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
           method: 'POST',

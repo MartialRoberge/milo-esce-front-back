@@ -8,7 +8,7 @@ const router = Router();
  */
 router.get('/', (_req: Request, res: Response) => {
   res.status(200).json({
-    service: 'octi-realtime-backend',
+    service: 'okti-realtime-backend',
     version: '1.0.0',
     status: 'ok',
     endpoints: {
@@ -28,7 +28,7 @@ router.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    service: 'octi-realtime-backend',
+    service: 'okti-realtime-backend',
   });
 });
 

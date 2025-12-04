@@ -215,21 +215,16 @@ function App() {
           reorderedAgents.unshift(agent);
         }
 
-        // Guardrails seulement pour customerServiceRetail et chatSupervisor
-        let outputGuardrails: any[] = [];
-        if (agentSetKey === 'customerServiceRetail' || agentSetKey === 'chatSupervisor') {
-          const companyName = agentSetKey === 'customerServiceRetail'
-            ? customerServiceRetailCompanyName
-            : chatSupervisorCompanyName;
-          const guardrail = createModerationGuardrail(companyName);
-          outputGuardrails = [guardrail];
-        }
+        const companyName = agentSetKey === 'customerServiceRetail'
+          ? customerServiceRetailCompanyName
+          : chatSupervisorCompanyName;
+        const guardrail = createModerationGuardrail(companyName);
 
         await connect({
           getEphemeralKey: async () => EPHEMERAL_KEY,
           initialAgents: reorderedAgents,
           audioElement: sdkAudioElement,
-          outputGuardrails,
+          outputGuardrails: [guardrail],
           extraContext: {
             addTranscriptBreadcrumb,
           },
@@ -419,20 +414,6 @@ function App() {
     if (sessionStatus === 'CONNECTED') {
       try {
         mute(!isAudioPlaybackEnabled);
-        // Attendre que le stream soit disponible avant de jouer l'audio
-        if (isAudioPlaybackEnabled && audioElementRef.current) {
-          const tryPlay = () => {
-            if (audioElementRef.current?.srcObject) {
-              audioElementRef.current.play().catch((err) => {
-                console.warn("Autoplay may be blocked by browser:", err);
-              });
-            } else {
-              // Réessayer après un court délai si le stream n'est pas encore disponible
-              setTimeout(tryPlay, 100);
-            }
-          };
-          tryPlay();
-        }
       } catch (err) {
         console.warn('mute sync after connect failed', err);
       }
@@ -444,20 +425,13 @@ function App() {
       // The remote audio stream from the audio element.
       const remoteStream = audioElementRef.current.srcObject as MediaStream;
       startRecording(remoteStream);
-      
-      // Essayer de démarrer l'audio une fois que le stream est disponible
-      if (isAudioPlaybackEnabled && audioElementRef.current) {
-        audioElementRef.current.play().catch((err) => {
-          console.warn("Autoplay may be blocked by browser:", err);
-        });
-      }
     }
 
     // Clean up on unmount or when sessionStatus is updated.
     return () => {
       stopRecording();
     };
-  }, [sessionStatus, isAudioPlaybackEnabled]);
+  }, [sessionStatus]);
 
   const agentSetKey = searchParams.get("agentConfig") || "default";
 
@@ -475,8 +449,6 @@ function App() {
               width={80}
               height={80}
               className="mr-2"
-              priority
-              style={{ width: 'auto', height: 'auto' }}
             />
           </div>
           <div>

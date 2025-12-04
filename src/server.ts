@@ -29,7 +29,8 @@ async function startServer() {
     });
 
     // Démarrer le serveur
-    server.listen(config.port, () => {
+    // Écouter sur 0.0.0.0 pour accepter les connexions depuis l'extérieur (nécessaire pour Render)
+    server.listen(config.port, '0.0.0.0', () => {
       logger.info(
         {
           port: config.port,

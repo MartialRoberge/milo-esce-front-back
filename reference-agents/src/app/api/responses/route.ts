@@ -5,13 +5,7 @@ import OpenAI from 'openai';
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    console.error('OPENAI_API_KEY is not set in environment variables');
-    return NextResponse.json({ error: 'OPENAI_API_KEY not configured' }, { status: 500 });
-  }
-
-  const openai = new OpenAI({ apiKey });
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   if (body.text?.format?.type === 'json_schema') {
     return await structuredResponse(openai, body);
