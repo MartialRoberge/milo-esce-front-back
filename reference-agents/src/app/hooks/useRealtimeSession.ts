@@ -134,7 +134,7 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
             return pc;
           },
         }),
-        model: 'gpt-4o-realtime-preview-2025-06-03',
+        model: 'gpt-4o-realtime',
         config: {
           inputAudioTranscription: {
             model: 'gpt-4o-transcribe', // Modèle plus puissant pour une meilleure transcription
