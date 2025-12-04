@@ -121,20 +121,30 @@ export function realtimeHandler(ws: WebSocket): void {
             }, '❌ Réponse OpenAI échouée');
             
             // Gérer spécifiquement les rate limits
-            if (errorCode === 'rate_limit_exceeded' || errorCode.includes('rate_limit')) {
+            if (errorCode === 'rate_limit_exceeded' || errorCode.includes('rate_limit') || errorMessage.toLowerCase().includes('rate limit')) {
               const waitTime = extractWaitTime(errorMessage) || 5; // Par défaut 5 secondes
-              logger.warn({ waitTime }, '⏳ Rate limit atteint, attente avant retry');
+              const waitTimeSeconds = Math.ceil(waitTime);
+              logger.warn({ waitTime, errorCode, errorMessage }, '⏳ Rate limit atteint, attente avant retry');
               
               sendError(
-                `Limite de débit atteinte. Veuillez réessayer dans ${Math.ceil(waitTime)} secondes. ` +
-                `(Erreur: ${errorMessage})`
+                `⏳ Limite de débit atteinte. Réessai automatique dans ${waitTimeSeconds} secondes...`
               );
               
-              // Optionnel : réinitialiser la session après le délai
+              // Réinitialiser la session après le délai + un petit buffer
               setTimeout(async () => {
-                logger.info('🔄 Réinitialisation de la session après rate limit');
-                await resetSession();
-              }, waitTime * 1000);
+                logger.info('🔄 Réinitialisation automatique de la session après rate limit');
+                try {
+                  await resetSession();
+                  // Envoyer un message de confirmation au frontend
+                  ws.send(JSON.stringify({
+                    type: 'ready',
+                    message: 'Session réinitialisée, prêt à continuer'
+                  }));
+                } catch (resetError) {
+                  logger.error({ resetError }, 'Erreur lors de la réinitialisation après rate limit');
+                  sendError('Erreur lors de la réinitialisation. Veuillez vous reconnecter.');
+                }
+              }, (waitTimeSeconds + 1) * 1000); // +1 seconde de buffer
             } else {
               // Autre type d'erreur
               sendError(`Erreur OpenAI: ${errorMessage}`);
@@ -203,20 +213,30 @@ export function realtimeHandler(ws: WebSocket): void {
           }, '❌ Erreur depuis OpenAI Realtime');
           
           // Gérer spécifiquement les rate limits
-          if (errorCode === 'rate_limit_exceeded' || errorCode.includes('rate_limit') || errorMessage.includes('rate limit')) {
+          if (errorCode === 'rate_limit_exceeded' || errorCode.includes('rate_limit') || errorMessage.toLowerCase().includes('rate limit')) {
             const waitTime = extractWaitTime(errorMessage) || 5;
-            logger.warn({ waitTime }, '⏳ Rate limit atteint, attente avant retry');
+            const waitTimeSeconds = Math.ceil(waitTime);
+            logger.warn({ waitTime, errorCode, errorMessage }, '⏳ Rate limit atteint, attente avant retry');
             
             sendError(
-              `Limite de débit atteinte. Veuillez réessayer dans ${Math.ceil(waitTime)} secondes. ` +
-              `(Erreur: ${errorMessage})`
+              `⏳ Limite de débit atteinte. Réessai automatique dans ${waitTimeSeconds} secondes...`
             );
             
-            // Optionnel : réinitialiser la session après le délai
+            // Réinitialiser la session après le délai + un petit buffer
             setTimeout(async () => {
-              logger.info('🔄 Réinitialisation de la session après rate limit');
-              await resetSession();
-            }, waitTime * 1000);
+              logger.info('🔄 Réinitialisation automatique de la session après rate limit');
+              try {
+                await resetSession();
+                // Envoyer un message de confirmation au frontend
+                ws.send(JSON.stringify({
+                  type: 'ready',
+                  message: 'Session réinitialisée, prêt à continuer'
+                }));
+              } catch (resetError) {
+                logger.error({ resetError }, 'Erreur lors de la réinitialisation après rate limit');
+                sendError('Erreur lors de la réinitialisation. Veuillez vous reconnecter.');
+              }
+            }, (waitTimeSeconds + 1) * 1000); // +1 seconde de buffer
           } else if (errorCode === 'connection_closed' || errorCode === 'websocket_error') {
             // Erreur de connexion, tenter une reconnexion
             logger.warn('Connexion fermée, tentative de reconnexion...');
@@ -252,18 +272,22 @@ export function realtimeHandler(ws: WebSocket): void {
    * Extrait le temps d'attente depuis un message d'erreur de rate limit
    */
   function extractWaitTime(errorMessage: string): number | null {
-    // Chercher des patterns comme "try again in 4.96s" ou "wait 5 seconds"
+    // Chercher des patterns comme "try again in 4.96s" ou "wait 5 seconds" ou "Please try again in 7.288s"
     const patterns = [
       /try again in ([\d.]+)s/i,
       /wait ([\d.]+) seconds/i,
       /retry after ([\d.]+)s/i,
       /in ([\d.]+) seconds/i,
+      /Please try again in ([\d.]+)s/i,
+      /try again in ([\d.]+) seconds/i,
     ];
     
     for (const pattern of patterns) {
       const match = errorMessage.match(pattern);
       if (match && match[1]) {
-        return parseFloat(match[1]);
+        const time = parseFloat(match[1]);
+        // S'assurer que le temps est raisonnable (max 60 secondes)
+        return Math.min(time, 60);
       }
     }
     
