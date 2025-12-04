@@ -73,6 +73,9 @@ export async function searchDocuments(query: string): Promise<string> {
     // Détecter si la requête contient un nom propre (majuscules, mots courts)
     const hasProperName = /[A-Z]{2,}/.test(query) || query.split(/\s+/).some(word => word.length <= 10 && /^[A-Z]/.test(word));
     
+    // Détecter si la requête concerne LinkedIn/profils
+    const isLinkedInQuery = /linkedin|profil|profile|étudiant.*linkedin|alumni/i.test(query);
+    
     // Pour les noms propres, faire une recherche textuelle d'abord
     let textMatches: string[] = [];
     if (hasProperName) {
@@ -101,8 +104,9 @@ export async function searchDocuments(query: string): Promise<string> {
     }
     
     // Recherche sémantique (toujours effectuée, mais utilisée seulement si pas de correspondances textuelles)
-    const topK = hasProperName ? 20 : 10;
-    const minScore = hasProperName ? 0.25 : 0.3;
+    // Pour les requêtes LinkedIn, augmenter topK pour trouver plus de profils
+    const topK = isLinkedInQuery ? 50 : (hasProperName ? 20 : 10);
+    const minScore = isLinkedInQuery ? 0.2 : (hasProperName ? 0.25 : 0.3);
     
     const searchResults = await index.query({
       vector: queryEmbedding,
@@ -130,10 +134,26 @@ export async function searchDocuments(query: string): Promise<string> {
       contexts = textMatches;
     } else {
       // Fallback sur recherche sémantique
-      contexts = searchResults.matches
-        .filter((match: any) => match.score && match.score >= minScore)
-        .slice(0, hasProperName ? 10 : 5)
-        .map((match: any) => match.metadata?.text as string)
+      // Pour LinkedIn, prioriser les résultats avec source='linkedin' dans les métadonnées
+      let filteredMatches = searchResults.matches.filter((match: any) => match.score && match.score >= minScore);
+      
+      if (isLinkedInQuery) {
+        // Prioriser les résultats LinkedIn
+        const linkedinMatches = filteredMatches.filter((m: any) => m.metadata?.source === 'linkedin');
+        const otherMatches = filteredMatches.filter((m: any) => m.metadata?.source !== 'linkedin');
+        filteredMatches = [...linkedinMatches, ...otherMatches];
+      }
+      
+      contexts = filteredMatches
+        .slice(0, isLinkedInQuery ? 15 : (hasProperName ? 10 : 5))
+        .map((match: any) => {
+          const text = match.metadata?.text as string;
+          // Pour LinkedIn, ajouter une indication si c'est un profil
+          if (isLinkedInQuery && match.metadata?.source === 'linkedin') {
+            return `[Profil LinkedIn] ${text}`;
+          }
+          return text;
+        })
         .filter(Boolean);
     }
 
