@@ -1,0 +1,46 @@
+services:
+  # Backend OKTI
+  - type: web
+    name: okti-backend
+    env: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OKTI_SYSTEM_PROMPT
+        sync: false
+      - key: OKTI_DEFAULT_VOICE
+        value: verse
+      - key: PINECONE_API_KEY
+        sync: false
+        optional: true
+      - key: PINECONE_INDEX_NAME
+        value: esce-documents
+        optional: true
+    healthCheckPath: /health
+
+  # Frontend OKTI
+  - type: web
+    name: okti-frontend
+    env: node
+    plan: starter
+    rootDir: reference-agents
+    buildCommand: cd reference-agents && npm install && npm run build
+    startCommand: cd reference-agents && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_BACKEND_URL
+        sync: false
+        # À configurer manuellement avec l'URL du backend après déploiement
+        # Format: https://okti-backend.onrender.com
+      - key: PORT
+        value: 10000
+    healthCheckPath: /
+
