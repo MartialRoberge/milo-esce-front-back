@@ -113,9 +113,9 @@ function App() {
   const [isPTTUserSpeaking, setIsPTTUserSpeaking] = useState<boolean>(false);
   const [isAudioPlaybackEnabled, setIsAudioPlaybackEnabled] = useState<boolean>(
     () => {
-      if (typeof window === 'undefined') return true;
+      if (typeof window === 'undefined') return false;
       const stored = localStorage.getItem('audioPlaybackEnabled');
-      return stored ? stored === 'true' : true; // Activé par défaut
+      return stored ? stored === 'true' : false;
     },
   );
 
@@ -215,18 +215,21 @@ function App() {
           reorderedAgents.unshift(agent);
         }
 
-        const companyName = agentSetKey === 'customerServiceRetail'
-          ? customerServiceRetailCompanyName
-          : agentSetKey === 'octi'
-          ? 'ESCE'
-          : chatSupervisorCompanyName;
-        const guardrail = createModerationGuardrail(companyName);
+        // Guardrails seulement pour customerServiceRetail et chatSupervisor
+        let outputGuardrails: any[] = [];
+        if (agentSetKey === 'customerServiceRetail' || agentSetKey === 'chatSupervisor') {
+          const companyName = agentSetKey === 'customerServiceRetail'
+            ? customerServiceRetailCompanyName
+            : chatSupervisorCompanyName;
+          const guardrail = createModerationGuardrail(companyName);
+          outputGuardrails = [guardrail];
+        }
 
         await connect({
           getEphemeralKey: async () => EPHEMERAL_KEY,
           initialAgents: reorderedAgents,
           audioElement: sdkAudioElement,
-          outputGuardrails: [guardrail],
+          outputGuardrails,
           extraContext: {
             addTranscriptBreadcrumb,
           },
