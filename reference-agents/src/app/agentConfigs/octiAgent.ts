@@ -152,8 +152,8 @@ Instructions importantes pour la conversation vocale :
 
           const data = await response.json();
           return {
-            context: data.context,
-            found: data.length > 0,
+            context: data.context || '',
+            found: data.found || (data.context && data.context.length > 0),
           };
         } catch (error) {
           console.error('Erreur lors de la recherche RAG:', error);
