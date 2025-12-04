@@ -113,9 +113,9 @@ function App() {
   const [isPTTUserSpeaking, setIsPTTUserSpeaking] = useState<boolean>(false);
   const [isAudioPlaybackEnabled, setIsAudioPlaybackEnabled] = useState<boolean>(
     () => {
-      if (typeof window === 'undefined') return false;
+      if (typeof window === 'undefined') return true;
       const stored = localStorage.getItem('audioPlaybackEnabled');
-      return stored ? stored === 'true' : false;
+      return stored ? stored === 'true' : true; // Activé par défaut
     },
   );
 

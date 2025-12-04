@@ -138,6 +138,7 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
         config: {
           inputAudioTranscription: {
             model: 'gpt-4o-mini-transcribe',
+            language: 'fr', // Forcer le français pour une meilleure transcription
           },
         },
         outputGuardrails: outputGuardrails ?? [],
