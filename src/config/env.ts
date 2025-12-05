@@ -24,7 +24,7 @@ export function getEnvConfig(): EnvConfig {
   const port = parseInt(process.env.PORT || '8080', 10);
   const nodeEnv = process.env.NODE_ENV || 'development';
   const openaiApiKey = process.env.OPENAI_API_KEY;
-  const openaiRealtimeModel = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-mini';
+  const openaiRealtimeModel = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2025-08-28';
   const octiSystemPrompt = process.env.OKTI_SYSTEM_PROMPT;
   const octiPromptId = process.env.OKTI_PROMPT_ID; // Optionnel
   const octiDefaultVoice = process.env.OKTI_DEFAULT_VOICE || 'verse';

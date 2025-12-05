@@ -29,7 +29,7 @@ router.get('/session', async (_req: Request, res: Response) => {
           model: string;
           tools?: typeof ragSearchTool[];
         } = {
-          model: config.openaiRealtimeModel || 'gpt-realtime-mini',
+          model: config.openaiRealtimeModel || 'gpt-realtime-2025-08-28',
         };
 
         // Ajouter le tool RAG si Pinecone est configuré

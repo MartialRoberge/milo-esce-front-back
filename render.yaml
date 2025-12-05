@@ -14,7 +14,7 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_REALTIME_MODEL
-        value: gpt-realtime-mini
+        value: gpt-realtime-2025-08-28
       - key: OKTI_SYSTEM_PROMPT
         sync: false
       - key: OKTI_DEFAULT_VOICE
