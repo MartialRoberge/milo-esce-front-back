@@ -91,7 +91,7 @@ export async function searchDocuments(query: string): Promise<string> {
           // Vérifier que TOUS les mots de la requête sont présents
           return queryWords.every(word => textUpper.includes(word));
         })
-        .slice(0, 10) // Limiter à 10 résultats
+        .slice(0, 5) // Réduire à 5 résultats pour limiter les tokens
         .map((match: any) => match.metadata?.text as string)
         .filter(Boolean);
       
@@ -130,14 +130,38 @@ export async function searchDocuments(query: string): Promise<string> {
       contexts = textMatches;
     } else {
       // Fallback sur recherche sémantique
+      // Réduire le nombre de résultats pour limiter les tokens
       contexts = searchResults.matches
         .filter((match: any) => match.score && match.score >= minScore)
-        .slice(0, hasProperName ? 10 : 5)
+        .slice(0, hasProperName ? 5 : 3) // Réduire : 5 max pour noms propres, 3 pour le reste
         .map((match: any) => match.metadata?.text as string)
         .filter(Boolean);
     }
 
-    const context = contexts.join('\n\n');
+    // Limiter la taille totale du contexte pour éviter les rate limits
+    // Maximum 1500 caractères pour réduire la consommation de tokens
+    const MAX_CONTEXT_LENGTH = 1500;
+    let context = contexts.join('\n\n');
+    
+    // Tronquer intelligemment si nécessaire
+    if (context.length > MAX_CONTEXT_LENGTH) {
+      context = context.substring(0, MAX_CONTEXT_LENGTH);
+      // Essayer de couper à la fin d'une phrase pour garder la cohérence
+      const lastPeriod = context.lastIndexOf('.');
+      const lastNewline = context.lastIndexOf('\n');
+      const cutPoint = Math.max(lastPeriod, lastNewline);
+      if (cutPoint > MAX_CONTEXT_LENGTH * 0.7) {
+        // Si on trouve une coupure naturelle dans les 70% finaux, l'utiliser
+        context = context.substring(0, cutPoint + 1);
+      } else {
+        // Sinon, tronquer simplement
+        context = context.substring(0, MAX_CONTEXT_LENGTH) + '...';
+      }
+      logger.debug({ 
+        originalLength: contexts.join('\n\n').length, 
+        truncatedLength: context.length 
+      }, 'Contexte RAG tronqué pour limiter les tokens');
+    }
 
     // Cache désactivé
     // if (context) {
