@@ -432,8 +432,21 @@ export function realtimeHandler(ws: WebSocket): void {
 
   // Surveiller la connexion OpenAI pour détecter les fermetures
   const checkConnectionInterval = setInterval(() => {
-    if (realtimeClient && !realtimeClient.connected && ws.readyState === WebSocket.OPEN) {
+    if (!realtimeClient || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    
+    // Vérifier si la connexion est perdue
+    if (!realtimeClient.connected) {
       logger.warn('Connexion OpenAI perdue, tentative de reconnexion...');
+      attemptReconnect();
+      return;
+    }
+    
+    // Vérifier aussi l'état de la WebSocket directement
+    const wsState = realtimeClient.ws?.readyState;
+    if (wsState === WebSocket.CLOSED || wsState === WebSocket.CLOSING) {
+      logger.warn({ wsState }, 'Connexion WebSocket OpenAI fermée détectée, reconnexion...');
       attemptReconnect();
     }
   }, 5000); // Vérifier toutes les 5 secondes
