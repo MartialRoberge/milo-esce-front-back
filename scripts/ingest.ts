@@ -55,12 +55,12 @@ async function parseExcel(filePath: string): Promise<string[]> {
   const sheets = workbook.SheetNames;
   const texts: string[] = [];
 
-  for (const sheetName ofé sheets) {
+  for (const sheetName of sheets) {
     const sheet = workbook.Sheets[sheetName];
     const jsonData = XLSX.utils.sheet_to_json(sheet);
     
-      // Créer une représentation optimisée pour la recherche par nom
-      if (jsonData.length > 0) {
+    // Créer une représentation optimisée pour la recherche par nom
+    if (jsonData.length > 0) {
         // Pour les stages, créer des descriptions structurées avec noms en début
         const structuredTexts = jsonData.map((row: any) => {
           const parts: string[] = [];

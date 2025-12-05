@@ -100,15 +100,20 @@ export async function searchDocuments(query: string): Promise<string> {
       }
     }
     
+    // Détecter si la requête concerne des étudiants inspirants/interviews
+    const isStudentInspirationQuery = /étudiant.*inspir|inspir.*étudiant|parcours.*inspir|témoignage|interview.*étudiant|étudiant.*parcours/i.test(query);
+    
     // Recherche sémantique (toujours effectuée, mais utilisée seulement si pas de correspondances textuelles)
     // Augmenter topK pour améliorer les chances de trouver des résultats pertinents
-    const topK = hasProperName ? 30 : 15;
-    const minScore = hasProperName ? 0.2 : 0.25; // Baisser légèrement le seuil pour plus de résultats
+    // Pour les requêtes sur étudiants inspirants, chercher plus largement
+    const topK = hasProperName ? 30 : (isStudentInspirationQuery ? 25 : 15);
+    const minScore = hasProperName ? 0.2 : (isStudentInspirationQuery ? 0.18 : 0.25); // Seuil plus bas pour interviews
     
     const searchResults = await index.query({
       vector: queryEmbedding,
       topK,
       includeMetadata: true,
+      filter: isStudentInspirationQuery ? undefined : undefined, // Pas de filtre pour l'instant
     });
 
     // 3. Extraire les textes pertinents
@@ -131,10 +136,21 @@ export async function searchDocuments(query: string): Promise<string> {
       contexts = textMatches;
     } else {
       // Fallback sur recherche sémantique
+      // Pour les requêtes sur étudiants inspirants, prioriser les interviews
+      let filteredMatches = searchResults.matches.filter((match: any) => match.score && match.score >= minScore);
+      
+      if (isStudentInspirationQuery) {
+        // Prioriser les résultats de type 'interview'
+        const interviewMatches = filteredMatches.filter((match: any) => match.metadata?.source === 'interview');
+        const otherMatches = filteredMatches.filter((match: any) => match.metadata?.source !== 'interview');
+        
+        // Prendre d'abord les interviews, puis les autres
+        filteredMatches = [...interviewMatches, ...otherMatches];
+      }
+      
       // Équilibrer entre pertinence et limitation des tokens
-      contexts = searchResults.matches
-        .filter((match: any) => match.score && match.score >= minScore)
-        .slice(0, hasProperName ? 8 : 5) // Augmenter : 8 max pour noms propres, 5 pour le reste
+      contexts = filteredMatches
+        .slice(0, hasProperName ? 8 : (isStudentInspirationQuery ? 8 : 5)) // Plus de résultats pour étudiants inspirants
         .map((match: any) => match.metadata?.text as string)
         .filter(Boolean);
     }
