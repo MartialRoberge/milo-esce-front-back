@@ -135,7 +135,7 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
             return pc;
           },
         }),
-        model: 'gpt-realtime', // Forcer explicitement gpt-realtime
+        model: 'gpt-realtime-mini', // Utiliser gpt-realtime-mini pour réduire la consommation de tokens
         config: {
           inputAudioTranscription: {
             model: 'gpt-4o-mini-transcribe',

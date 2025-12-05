@@ -11,7 +11,7 @@ export async function GET() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: process.env.OPENAI_REALTIME_MODEL || "gpt-realtime",
+          model: process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-mini",
         }),
       }
     );
