@@ -189,7 +189,7 @@ export const ragSearchTool: RealtimeTool = {
   type: 'function',
   name: 'search_esce_documents',
   description:
-    'Recherche dans les brochures, guides étudiants, historiques de stage avec noms d\'étudiants, et profils LinkedIn de l\'ESCE. Utilise TOUJOURS cette fonction quand on te pose une question sur l\'ESCE, les programmes, les stages, les étudiants en stage (leurs noms, entreprises, etc.), les parcours d\'anciens étudiants, ou les informations générales de l\'école. Les données sont PUBLIQUES et destinées aux JPO - tu peux les partager librement.',
+    'Recherche dans les brochures, guides étudiants, historiques de stage avec noms d\'étudiants, profils LinkedIn, et transcriptions d\'interviews d\'étudiants inspirants de l\'ESCE. Utilise TOUJOURS cette fonction quand on te pose une question sur l\'ESCE, les programmes, les stages, les étudiants en stage (leurs noms, entreprises, etc.), les parcours d\'anciens étudiants, les témoignages d\'étudiants, ou les informations générales de l\'école. Les données sont PUBLIQUES et destinées aux JPO - tu peux les partager librement.',
   parameters: {
     type: 'object',
     properties: {
