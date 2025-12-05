@@ -91,7 +91,7 @@ export async function searchDocuments(query: string): Promise<string> {
           // Vérifier que TOUS les mots de la requête sont présents
           return queryWords.every(word => textUpper.includes(word));
         })
-        .slice(0, 5) // Réduire à 5 résultats pour limiter les tokens
+        .slice(0, 8) // Augmenter à 8 résultats pour améliorer la pertinence
         .map((match: any) => match.metadata?.text as string)
         .filter(Boolean);
       
@@ -101,8 +101,9 @@ export async function searchDocuments(query: string): Promise<string> {
     }
     
     // Recherche sémantique (toujours effectuée, mais utilisée seulement si pas de correspondances textuelles)
-    const topK = hasProperName ? 20 : 10;
-    const minScore = hasProperName ? 0.25 : 0.3;
+    // Augmenter topK pour améliorer les chances de trouver des résultats pertinents
+    const topK = hasProperName ? 30 : 15;
+    const minScore = hasProperName ? 0.2 : 0.25; // Baisser légèrement le seuil pour plus de résultats
     
     const searchResults = await index.query({
       vector: queryEmbedding,
@@ -130,28 +131,28 @@ export async function searchDocuments(query: string): Promise<string> {
       contexts = textMatches;
     } else {
       // Fallback sur recherche sémantique
-      // Réduire le nombre de résultats pour limiter les tokens
+      // Équilibrer entre pertinence et limitation des tokens
       contexts = searchResults.matches
         .filter((match: any) => match.score && match.score >= minScore)
-        .slice(0, hasProperName ? 5 : 3) // Réduire : 5 max pour noms propres, 3 pour le reste
+        .slice(0, hasProperName ? 8 : 5) // Augmenter : 8 max pour noms propres, 5 pour le reste
         .map((match: any) => match.metadata?.text as string)
         .filter(Boolean);
     }
 
     // Limiter la taille totale du contexte pour éviter les rate limits
-    // Maximum 1500 caractères pour réduire la consommation de tokens
-    const MAX_CONTEXT_LENGTH = 1500;
+    // Maximum 2500 caractères pour garder de la pertinence tout en limitant les tokens
+    const MAX_CONTEXT_LENGTH = 2500;
     let context = contexts.join('\n\n');
     
     // Tronquer intelligemment si nécessaire
     if (context.length > MAX_CONTEXT_LENGTH) {
-      context = context.substring(0, MAX_CONTEXT_LENGTH);
       // Essayer de couper à la fin d'une phrase pour garder la cohérence
-      const lastPeriod = context.lastIndexOf('.');
-      const lastNewline = context.lastIndexOf('\n');
+      const lastPeriod = context.lastIndexOf('.', MAX_CONTEXT_LENGTH);
+      const lastNewline = context.lastIndexOf('\n', MAX_CONTEXT_LENGTH);
       const cutPoint = Math.max(lastPeriod, lastNewline);
-      if (cutPoint > MAX_CONTEXT_LENGTH * 0.7) {
-        // Si on trouve une coupure naturelle dans les 70% finaux, l'utiliser
+      
+      if (cutPoint > MAX_CONTEXT_LENGTH * 0.6) {
+        // Si on trouve une coupure naturelle dans les 60% finaux, l'utiliser
         context = context.substring(0, cutPoint + 1);
       } else {
         // Sinon, tronquer simplement
