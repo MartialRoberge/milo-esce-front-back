@@ -160,7 +160,11 @@ export function DeepOceanBackground({ state, triggerBurst }: DeepOceanBackground
 
   // Only generate random values on client side
   useEffect(() => {
-    setIsMounted(true);
+    // Small delay to ensure hydration is complete
+    const timer = setTimeout(() => {
+      setIsMounted(true);
+    }, 50);
+    return () => clearTimeout(timer);
   }, []);
 
   // Generate ambient bubbles - only on client to avoid hydration mismatch

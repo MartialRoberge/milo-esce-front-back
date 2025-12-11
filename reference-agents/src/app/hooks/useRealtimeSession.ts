@@ -13,6 +13,10 @@ import { SessionStatus } from '../types';
 export interface RealtimeSessionCallbacks {
   onConnectionChange?: (status: SessionStatus) => void;
   onAgentHandoff?: (agentName: string) => void;
+  onResponseStart?: () => void;
+  onResponseDone?: () => void;
+  onAudioStarted?: () => void;
+  onAudioStopped?: () => void;
 }
 
 export interface ConnectOptions {
@@ -43,9 +47,14 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
 
   const historyHandlers = useHandleSessionHistory().current;
 
-  function handleTransportEvent(event: any) {
+  // Store callbacks in ref to avoid stale closures
+  const callbacksRef = useRef(callbacks);
+  callbacksRef.current = callbacks;
+
+  function handleTransportEvent(event: Record<string, unknown>) {
+    const eventType = event.type as string;
     // Handle additional server events that aren't managed by the session
-    switch (event.type) {
+    switch (eventType) {
       case "conversation.item.input_audio_transcription.completed": {
         historyHandlers.handleTranscriptionCompleted(event);
         break;
@@ -58,10 +67,34 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
         historyHandlers.handleTranscriptionDelta(event);
         break;
       }
+      case "response.created": {
+        // Response started - MILO is about to speak
+        callbacksRef.current.onResponseStart?.();
+        logServerEvent(event);
+        break;
+      }
+      case "response.done": {
+        // Response generation finished (but audio might still be playing)
+        callbacksRef.current.onResponseDone?.();
+        logServerEvent(event);
+        break;
+      }
+      case "output_audio_buffer.started": {
+        // WebRTC: Audio playback started
+        callbacksRef.current.onAudioStarted?.();
+        logServerEvent(event);
+        break;
+      }
+      case "output_audio_buffer.stopped": {
+        // WebRTC: Audio playback finished - buffer is empty
+        callbacksRef.current.onAudioStopped?.();
+        logServerEvent(event);
+        break;
+      }
       default: {
         logServerEvent(event);
         break;
-      } 
+      }
     }
   }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 interface ThreeOrbProps {
@@ -199,6 +199,7 @@ export function ThreeOrb({ state, audioLevel }: ThreeOrbProps) {
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   const animationRef = useRef<number>(0);
   const clockRef = useRef(new THREE.Clock());
+  const [isReady, setIsReady] = useState(false);
 
   // Audio processing refs
   const smoothAudioRef = useRef(0);
@@ -223,6 +224,17 @@ export function ThreeOrb({ state, audioLevel }: ThreeOrbProps) {
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    // Small delay to ensure DOM is ready
+    const initTimer = setTimeout(() => {
+      setIsReady(true);
+    }, 100);
+
+    return () => clearTimeout(initTimer);
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current || !isReady) return;
 
     const container = containerRef.current;
     const width = container.offsetWidth;
@@ -402,7 +414,7 @@ export function ThreeOrb({ state, audioLevel }: ThreeOrbProps) {
       material.dispose();
       renderer.dispose();
     };
-  }, []);
+  }, [isReady]);
 
   return (
     <>

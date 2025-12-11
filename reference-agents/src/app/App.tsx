@@ -1,7 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import gsap from 'gsap';
 
 // Types
 import { SessionStatus } from "@/app/types";
@@ -28,63 +27,35 @@ const sdkScenarioMap: Record<string, RealtimeAgent[]> = {
 
 // Props interface for AnimatedSubtitles
 interface AnimatedSubtitlesProps {
-  isActive: boolean;
   text: string;
   onWordPulse?: () => void;
 }
 
-// Simple subtitles - shows full response text when speaking (no background, wider)
+// Simple subtitles - directly controlled by text prop, no internal state delays
 function AnimatedSubtitles({
-  isActive,
   text,
   onWordPulse,
 }: AnimatedSubtitlesProps): React.ReactElement | null {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [showingText, setShowingText] = useState<boolean>(false);
-  const [displayedText, setDisplayedText] = useState<string>('');
   const prevTextRef = useRef<string>('');
 
-  // Update displayed text when speaking
+  // Trigger pulse on new words
   useEffect(() => {
-    if (isActive && text) {
-      setShowingText(true);
-      setDisplayedText(text);
-
-      // Trigger pulse on new words
-      if (text !== prevTextRef.current) {
-        const prevWords = prevTextRef.current.split(/\s+/).length;
-        const newWords = text.split(/\s+/).length;
-        if (newWords > prevWords) {
-          onWordPulse?.();
-        }
-        prevTextRef.current = text;
+    if (text && text !== prevTextRef.current) {
+      const prevWords = prevTextRef.current.split(/\s+/).length;
+      const newWords = text.split(/\s+/).length;
+      if (newWords > prevWords) {
+        onWordPulse?.();
       }
+      prevTextRef.current = text;
     }
-  }, [isActive, text, onWordPulse]);
-
-  // Hide after speech ends
-  useEffect(() => {
-    if (!isActive && showingText) {
-      const hideTimeout = setTimeout(() => {
-        setShowingText(false);
-        setDisplayedText('');
-        prevTextRef.current = '';
-      }, 2500);
-      return () => clearTimeout(hideTimeout);
+    // Reset ref when text is cleared
+    if (!text) {
+      prevTextRef.current = '';
     }
-  }, [isActive, showingText]);
+  }, [text, onWordPulse]);
 
-  // Animate on show
-  useEffect(() => {
-    if (!containerRef.current || !showingText) return;
-
-    gsap.fromTo(containerRef.current,
-      { opacity: 0, y: 20 },
-      { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' }
-    );
-  }, [showingText]);
-
-  if (!showingText || !displayedText) return null;
+  // Don't render if no text
+  if (!text) return null;
 
   return (
     <div
@@ -96,10 +67,7 @@ function AnimatedSubtitles({
         width: '90%',
       }}
     >
-      <div
-        ref={containerRef}
-        className="text-center px-4 py-2 w-full"
-      >
+      <div className="text-center px-4 py-2 w-full">
         <p
           style={{
             fontFamily: "'Montserrat', sans-serif",
@@ -111,7 +79,7 @@ function AnimatedSubtitles({
             margin: 0,
           }}
         >
-          {displayedText}
+          {text}
         </p>
       </div>
     </div>
@@ -128,7 +96,9 @@ interface StateHintProps {
 function StateHint({ state, sessionStatus }: StateHintProps): React.ReactElement | null {
   let text = '';
 
-  if (sessionStatus === 'DISCONNECTED' || sessionStatus === 'CONNECTING') {
+  if (sessionStatus === 'DISCONNECTED') {
+    text = 'Appuyez pour parler à MILO';
+  } else if (sessionStatus === 'CONNECTING') {
     text = 'Connexion...';
   } else if (state === 'idle') {
     text = 'Maintenez ESPACE pour parler';
@@ -198,7 +168,7 @@ function App() {
   const [smoothAudio, setSmoothAudio] = useState(0);
   const [wordPulse, setWordPulse] = useState(0);
   const [showBubbleBurst, setShowBubbleBurst] = useState(false);
-  const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
 
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const handoffTriggeredRef = useRef(false);
@@ -221,6 +191,7 @@ function App() {
     }
   }, [sdkAudioElement]);
 
+
   const {
     connect,
     sendEvent,
@@ -233,6 +204,29 @@ function App() {
     onAgentHandoff: (agentName: string) => {
       handoffTriggeredRef.current = true;
       setSelectedAgentName(agentName);
+    },
+    onResponseStart: () => {
+      // MILO started generating response
+      if (sessionStatus === 'CONNECTED') {
+        setMiloState('speaking');
+        increaseDepth();
+      }
+    },
+    onResponseDone: () => {
+      // Response generation complete - audio might still be playing
+      // We'll wait for onAudioStopped to return to idle
+    },
+    onAudioStarted: () => {
+      // Audio playback started (WebRTC specific)
+      console.log('[MILO] Audio started');
+      if (sessionStatus === 'CONNECTED' && miloState !== 'listening') {
+        setMiloState('speaking');
+      }
+    },
+    onAudioStopped: () => {
+      // Audio playback finished (WebRTC specific) - return to idle
+      console.log('[MILO] Audio stopped');
+      setMiloState('idle');
     },
   });
 
@@ -286,7 +280,7 @@ function App() {
     setInitialized(true);
   }, [setInitialized]);
 
-  // Watch transcript for agent speech
+  // Watch transcript for subtitles display (state is now managed by response events)
   useEffect(() => {
     const assistantMessages = transcriptItems
       .filter(item => item.type === 'MESSAGE' && item.role === 'assistant')
@@ -296,42 +290,9 @@ function App() {
       const latestMessage = assistantMessages[0];
       if (latestMessage.title && latestMessage.title !== currentTranscript) {
         setCurrentTranscript(latestMessage.title);
-        if (sessionStatus === 'CONNECTED' && miloState !== 'listening') {
-          setMiloState('speaking');
-          increaseDepth();
-        }
       }
     }
-  }, [transcriptItems, currentTranscript, setCurrentTranscript, setMiloState, sessionStatus, miloState, increaseDepth]);
-
-  // Auto reset to idle when transcript stops changing (MILO finished speaking)
-  const lastTranscriptChangeRef = useRef(Date.now());
-  const prevTranscriptRef = useRef('');
-
-  // Track when transcript changes
-  useEffect(() => {
-    if (currentTranscript !== prevTranscriptRef.current) {
-      lastTranscriptChangeRef.current = Date.now();
-      prevTranscriptRef.current = currentTranscript;
-    }
-  }, [currentTranscript]);
-
-  useEffect(() => {
-    if (miloState !== 'speaking') {
-      return;
-    }
-
-    // Poll every 100ms to check if transcript stopped updating
-    const interval = setInterval(() => {
-      const timeSinceLastChange = Date.now() - lastTranscriptChangeRef.current;
-      // After 2.5 seconds of no transcript changes, MILO is done speaking
-      if (timeSinceLastChange > 2500) {
-        setMiloState('idle');
-      }
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [miloState, setMiloState]);
+  }, [transcriptItems, currentTranscript, setCurrentTranscript]);
 
   // Agent config setup
   useEffect(() => {
@@ -397,18 +358,7 @@ function App() {
           },
         });
 
-        // Configure for Push-to-Talk mode: disable VAD and mute by default
-        setTimeout(() => {
-          // Disable automatic voice detection - we'll use manual PTT
-          sendEvent({
-            type: 'session.update',
-            session: {
-              turn_detection: null, // Disable VAD for true PTT
-            },
-          });
-          // Mute by default - will unmute only during PTT
-          mute(true);
-        }, 500);
+        // PTT configuration is done in useEffect when sessionStatus becomes CONNECTED
 
       } catch (err) {
         console.error("Error connecting via SDK:", err);
@@ -480,25 +430,29 @@ function App() {
     };
   }, [handleStart, handleEnd]);
 
-  // Map session status to MILO state
+  // Map session status to MILO state + configure PTT when connected
+  const pttConfiguredRef = useRef(false);
   useEffect(() => {
     if (sessionStatus === 'DISCONNECTED') {
       setMiloState('idle');
+      pttConfiguredRef.current = false;
+    } else if (sessionStatus === 'CONNECTED' && !pttConfiguredRef.current) {
+      pttConfiguredRef.current = true;
+      // Configure for Push-to-Talk mode: disable VAD and mute by default
+      sendEvent({
+        type: 'session.update',
+        session: {
+          turn_detection: null, // Disable VAD for true PTT
+        },
+      });
+      // Mute by default - will unmute only during PTT
+      mute(true);
     }
-  }, [sessionStatus, setMiloState]);
+  }, [sessionStatus, setMiloState, sendEvent, mute]);
 
-  // Auto-connect on page load
-  const autoConnectAttemptedRef = useRef(false);
-  useEffect(() => {
-    if (
-      selectedAgentName &&
-      sessionStatus === 'DISCONNECTED' &&
-      !autoConnectAttemptedRef.current
-    ) {
-      autoConnectAttemptedRef.current = true;
-      connectToRealtime();
-    }
-  }, [selectedAgentName, sessionStatus]);
+  // Note: Auto-connect is not possible due to browser security restrictions
+  // The microphone permission requires user interaction (click/tap) first
+  // Connection happens on first click/tap via handleStart
 
   return (
     <div className="relative w-full h-screen overflow-hidden select-none">
@@ -531,9 +485,8 @@ function App() {
       <ThreeOrb state={miloState} audioLevel={smoothAudio} />
 
       {/* Animated subtitles when MILO speaks - synced with audio output */}
-      {subtitlesEnabled && (
+      {subtitlesEnabled && miloState === 'speaking' && currentTranscript && (
         <AnimatedSubtitles
-          isActive={miloState === 'speaking'}
           text={currentTranscript}
           onWordPulse={handleWordPulse}
         />
