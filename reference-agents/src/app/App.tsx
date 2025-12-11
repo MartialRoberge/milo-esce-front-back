@@ -221,6 +221,8 @@ function App() {
       console.log('[MILO] Audio started');
       if (sessionStatus === 'CONNECTED' && miloState !== 'listening') {
         setMiloState('speaking');
+        // Clear previous transcript to avoid flash of old subtitle
+        setCurrentTranscript('');
       }
     },
     onAudioStopped: () => {
