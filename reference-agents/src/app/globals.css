@@ -1,22 +1,239 @@
+@import url('https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@300;400;500&family=Montserrat:wght@400;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #fafafa;
-  --foreground: #171717;
+  --background: #030d18;
+  --foreground: #ffffff;
+
+  /* MILO Theme - ESCE Brand Guidelines - BLUE ONLY */
+  --color-blue-deep: #133677;
+  --color-blue-electric: #0000f5;
+  --color-dark: #0f222e;
+
+  /* Pantone Blues */
+  --color-pantone-5405: #5d7a8c;
+  --color-pantone-celestial: #93b7c9;
+  --color-pantone-swedish: #6ba4d9;
+  --color-pantone-291: #7eb3d8;
+  --color-pantone-277: #b3d4e8;
+
+  /* Depth levels - getting darker as we go deeper */
+  --depth-0: #1a4a7a;
+  --depth-1: #133677;
+  --depth-2: #0f2a5f;
+  --depth-3: #0a1f47;
+  --depth-4: #06142f;
+  --depth-5: #030a17;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Base Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #__next {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
+  font-family: 'Chivo Mono', monospace;
   color: var(--foreground);
   background: var(--background);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  cursor: default;
+  user-select: none;
+}
+
+/* Gotham-style for brand elements - using Montserrat as alternative */
+.font-display {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+/* ESCE Italic angle: -7 degrees (83 from perpendicular) */
+.esce-angle {
+  transform: skewX(-7deg);
+}
+
+/* Subtle animations */
+@keyframes breathe {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-60px);
+  }
+}
+
+@keyframes wave-subtle {
+  0%, 100% {
+    transform: translateY(0) scaleY(1);
+  }
+  50% {
+    transform: translateY(-2px) scaleY(1.1);
+  }
+}
+
+@keyframes depth-transition {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes type-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes particle-drift {
+  0% {
+    transform: translateY(100vh) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.3;
+  }
+  90% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(-10vh) translateX(var(--drift, 20px));
+    opacity: 0;
+  }
+}
+
+/* Utility classes */
+.animate-breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-float-up {
+  animation: float-up 4s ease-out forwards;
+}
+
+.animate-wave {
+  animation: wave-subtle 2s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-type-cursor {
+  animation: type-cursor 1s step-end infinite;
+}
+
+/* Depth backgrounds */
+.depth-gradient {
+  background: linear-gradient(180deg,
+    var(--depth-0) 0%,
+    var(--depth-1) 25%,
+    var(--depth-2) 50%,
+    var(--depth-3) 75%,
+    var(--depth-4) 100%
+  );
+  transition: all 2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Interactive zone - invisible but responsive */
+.interaction-zone {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.interaction-zone:hover {
+  background: rgba(0, 0, 245, 0.02);
+}
+
+.interaction-zone:active {
+  background: rgba(0, 0, 245, 0.05);
+}
+
+/* Text styles */
+.text-response {
+  font-family: 'Chivo Mono', monospace;
+  font-weight: 300;
+  line-height: 1.8;
+  letter-spacing: 0.02em;
+}
+
+/* Minimal scrollbar */
+::-webkit-scrollbar {
+  width: 2px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 245, 0.3);
+  border-radius: 1px;
+}
+
+/* Focus states - subtle */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 1px solid rgba(0, 0, 245, 0.3);
+  outline-offset: 2px;
 }
