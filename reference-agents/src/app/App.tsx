@@ -13,7 +13,6 @@ import { useEvent } from "@/app/contexts/EventContext";
 import { useRealtimeSession } from "./hooks/useRealtimeSession";
 import { useMiloStore } from "./store/useMiloStore";
 import { useAudioAnalyzer } from "./hooks/useAudioAnalyzer";
-import { useOutputAudioAnalyzer } from "./hooks/useOutputAudioAnalyzer";
 
 // Visual components
 import { ThreeOrb } from "./components/ThreeOrb";
@@ -27,21 +26,23 @@ const sdkScenarioMap: Record<string, RealtimeAgent[]> = {
   octi: allAgentSets.octi,
 };
 
-// Simple subtitles - shows full response text when speaking
+// Props interface for AnimatedSubtitles
+interface AnimatedSubtitlesProps {
+  isActive: boolean;
+  text: string;
+  onWordPulse?: () => void;
+}
+
+// Simple subtitles - shows full response text when speaking (no background, wider)
 function AnimatedSubtitles({
   isActive,
   text,
   onWordPulse,
-}: {
-  isActive: boolean;
-  text: string;
-  onWordPulse?: () => void;
-  audioLevel?: number; // kept for compatibility but not used
-}) {
+}: AnimatedSubtitlesProps): React.ReactElement | null {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [showingText, setShowingText] = useState(false);
-  const [displayedText, setDisplayedText] = useState('');
-  const prevTextRef = useRef('');
+  const [showingText, setShowingText] = useState<boolean>(false);
+  const [displayedText, setDisplayedText] = useState<string>('');
+  const prevTextRef = useRef<string>('');
 
   // Update displayed text when speaking
   useEffect(() => {
@@ -89,32 +90,24 @@ function AnimatedSubtitles({
     <div
       className="fixed z-40 flex items-center justify-center pointer-events-none"
       style={{
-        bottom: '12%',
-        left: '50%',
-        transform: 'translateX(-50%)',
+        bottom: '8%',
+        left: '5%',
+        right: '5%',
         width: '90%',
-        maxWidth: '700px',
       }}
     >
       <div
         ref={containerRef}
-        className="text-center px-5 py-3"
-        style={{
-          fontFamily: "'Montserrat', sans-serif",
-          background: 'rgba(0, 0, 0, 0.5)',
-          borderRadius: '10px',
-          backdropFilter: 'blur(12px)',
-          maxHeight: '30vh',
-          overflowY: 'auto',
-        }}
+        className="text-center px-4 py-2 w-full"
       >
         <p
           style={{
-            fontSize: 'clamp(1rem, 2.5vw, 1.4rem)',
+            fontFamily: "'Montserrat', sans-serif",
+            fontSize: 'clamp(1.1rem, 3vw, 1.6rem)',
             fontWeight: 500,
             color: 'white',
-            textShadow: '0 1px 8px rgba(0,0,0,0.5)',
-            lineHeight: 1.5,
+            textShadow: '0 2px 10px rgba(0,0,0,0.8), 0 0 30px rgba(0,0,0,0.6)',
+            lineHeight: 1.6,
             margin: 0,
           }}
         >
@@ -125,13 +118,17 @@ function AnimatedSubtitles({
   );
 }
 
+// Props interface for StateHint
+interface StateHintProps {
+  state: string;
+  sessionStatus: SessionStatus;
+}
+
 // State hint - shows instructions to user
-function StateHint({ state, sessionStatus }: { state: string; sessionStatus: SessionStatus }) {
+function StateHint({ state, sessionStatus }: StateHintProps): React.ReactElement | null {
   let text = '';
 
-  if (sessionStatus === 'DISCONNECTED') {
-    text = 'Cliquez pour commencer';
-  } else if (sessionStatus === 'CONNECTING') {
+  if (sessionStatus === 'DISCONNECTED' || sessionStatus === 'CONNECTING') {
     text = 'Connexion...';
   } else if (state === 'idle') {
     text = 'Maintenez ESPACE pour parler';
@@ -224,13 +221,6 @@ function App() {
     }
   }, [sdkAudioElement]);
 
-  // Output audio analyzer for syncing orb with MILO's speech
-  // Always enabled when connected so we can detect when MILO stops speaking
-  const { outputAudioLevel } = useOutputAudioAnalyzer({
-    audioElement: sdkAudioElement || null,
-    enabled: sessionStatus === 'CONNECTED',
-  });
-
   const {
     connect,
     sendEvent,
@@ -253,7 +243,7 @@ function App() {
     setTimeout(() => setWordPulse(0), 200);
   }, []);
 
-  // Smooth audio - use mic input when listening, output audio when speaking
+  // Smooth audio - use mic input when listening, simulate when speaking
   useEffect(() => {
     const update = () => {
       let target = 0;
@@ -262,19 +252,30 @@ function App() {
         // User is speaking - use mic input
         target = audioLevel;
       } else if (miloState === 'speaking') {
-        // MILO is speaking - use output audio level for perfect sync
-        // Combine with word pulse for extra visual feedback
-        target = Math.max(outputAudioLevel, wordPulse * 0.4);
+        // MILO is speaking - simulate organic audio pattern
+        // Use a combination of sine waves at different frequencies for natural feel
+        const time = Date.now() / 1000;
+        const wave1 = Math.sin(time * 8) * 0.3;  // Fast variation
+        const wave2 = Math.sin(time * 3.5) * 0.25; // Medium variation
+        const wave3 = Math.sin(time * 1.2) * 0.2;  // Slow variation
+        const noise = (Math.random() - 0.5) * 0.15; // Random noise for natural feel
+
+        // Combine waves and add base level when speaking
+        const simulatedLevel = 0.4 + wave1 + wave2 + wave3 + noise;
+        target = Math.max(0.2, Math.min(0.9, simulatedLevel));
+
+        // Also use word pulse if available
+        target = Math.max(target, wordPulse * 0.5);
       }
 
-      audioRef.current += (target - audioRef.current) * 0.25;
+      audioRef.current += (target - audioRef.current) * 0.15;
       setSmoothAudio(audioRef.current);
       frameRef.current = requestAnimationFrame(update);
     };
 
     frameRef.current = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frameRef.current);
-  }, [isAudioActive, audioLevel, miloState, wordPulse, outputAudioLevel]);
+  }, [isAudioActive, audioLevel, miloState, wordPulse]);
 
   useEffect(() => {
     setAudioLevel(smoothAudio);
@@ -303,35 +304,31 @@ function App() {
     }
   }, [transcriptItems, currentTranscript, setCurrentTranscript, setMiloState, sessionStatus, miloState, increaseDepth]);
 
-  // Auto reset to idle when audio output stops (MILO finished speaking)
-  const silenceCounterRef = useRef(0);
-  const outputAudioLevelRef = useRef(0);
+  // Auto reset to idle when transcript stops changing (MILO finished speaking)
+  const lastTranscriptChangeRef = useRef(Date.now());
+  const prevTranscriptRef = useRef('');
 
-  // Keep ref in sync with state
+  // Track when transcript changes
   useEffect(() => {
-    outputAudioLevelRef.current = outputAudioLevel;
-  }, [outputAudioLevel]);
+    if (currentTranscript !== prevTranscriptRef.current) {
+      lastTranscriptChangeRef.current = Date.now();
+      prevTranscriptRef.current = currentTranscript;
+    }
+  }, [currentTranscript]);
 
   useEffect(() => {
     if (miloState !== 'speaking') {
-      silenceCounterRef.current = 0;
       return;
     }
 
-    // Poll every 50ms to check for silence
+    // Poll every 100ms to check if transcript stopped updating
     const interval = setInterval(() => {
-      if (outputAudioLevelRef.current < 0.02) {
-        silenceCounterRef.current += 1;
-        // After ~1.5 seconds of silence (30 * 50ms), reset to idle
-        if (silenceCounterRef.current > 30) {
-          setMiloState('idle');
-          silenceCounterRef.current = 0;
-        }
-      } else {
-        // Reset counter when audio is playing
-        silenceCounterRef.current = 0;
+      const timeSinceLastChange = Date.now() - lastTranscriptChangeRef.current;
+      // After 2.5 seconds of no transcript changes, MILO is done speaking
+      if (timeSinceLastChange > 2500) {
+        setMiloState('idle');
       }
-    }, 50);
+    }, 100);
 
     return () => clearInterval(interval);
   }, [miloState, setMiloState]);
@@ -490,6 +487,19 @@ function App() {
     }
   }, [sessionStatus, setMiloState]);
 
+  // Auto-connect on page load
+  const autoConnectAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (
+      selectedAgentName &&
+      sessionStatus === 'DISCONNECTED' &&
+      !autoConnectAttemptedRef.current
+    ) {
+      autoConnectAttemptedRef.current = true;
+      connectToRealtime();
+    }
+  }, [selectedAgentName, sessionStatus]);
+
   return (
     <div className="relative w-full h-screen overflow-hidden select-none">
       {/* Deep Ocean Background with ESCE brand colors */}
@@ -526,7 +536,6 @@ function App() {
           isActive={miloState === 'speaking'}
           text={currentTranscript}
           onWordPulse={handleWordPulse}
-          audioLevel={smoothAudio}
         />
       )}
 
