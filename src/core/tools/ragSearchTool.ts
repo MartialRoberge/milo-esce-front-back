@@ -3,6 +3,16 @@ import { OpenAI } from 'openai';
 import { getEnvConfig } from '../../config/env';
 import { logger } from '../../config/logger';
 
+interface PineconeMatch {
+  id: string;
+  score?: number;
+  metadata?: {
+    text?: string;
+    source?: string;
+    [key: string]: string | number | boolean | string[] | undefined;
+  };
+}
+
 let pineconeClient: Pinecone | null = null;
 let openaiClient: OpenAI | null = null;
 
@@ -84,15 +94,15 @@ export async function searchDocuments(query: string): Promise<string> {
         includeMetadata: true,
       });
       
-      textMatches = textSearchResults.matches
-        .filter((match: any) => {
+      textMatches = (textSearchResults.matches as PineconeMatch[])
+        .filter((match) => {
           if (!match.metadata?.text) return false;
-          const textUpper = (match.metadata.text as string).toUpperCase();
+          const textUpper = match.metadata.text.toUpperCase();
           // Vérifier que TOUS les mots de la requête sont présents
           return queryWords.every(word => textUpper.includes(word));
         })
         .slice(0, 15) // Plus de résultats textuels pour une meilleure précision
-        .map((match: any) => match.metadata?.text as string)
+        .map((match) => match.metadata?.text ?? '')
         .filter(Boolean);
       
       if (textMatches.length > 0) {
@@ -117,43 +127,44 @@ export async function searchDocuments(query: string): Promise<string> {
     });
 
     // 3. Extraire les textes pertinents
+    const typedMatches = searchResults.matches as PineconeMatch[];
     // Logger les scores pour debug
-    if (searchResults.matches.length > 0) {
-      logger.debug({ 
-        scores: searchResults.matches.map((m: any) => m.score),
-        topScore: searchResults.matches[0]?.score,
-        totalMatches: searchResults.matches.length,
+    if (typedMatches.length > 0) {
+      logger.debug({
+        scores: typedMatches.map((m) => m.score),
+        topScore: typedMatches[0]?.score,
+        totalMatches: typedMatches.length,
         hasProperName,
         minScore
       }, 'Scores de recherche Pinecone');
     }
-    
+
     // Utiliser les correspondances textuelles si disponibles, sinon recherche sémantique
     let contexts: string[] = [];
-    
+
     if (textMatches.length > 0) {
       // Prioriser les correspondances textuelles pour les noms propres
       contexts = textMatches;
     } else {
       // Fallback sur recherche sémantique
       // Pour les requêtes sur étudiants inspirants, prioriser les interviews
-      let filteredMatches = searchResults.matches.filter((match: any) => match.score && match.score >= minScore);
-      
+      let filteredMatches = typedMatches.filter((match) => match.score && match.score >= minScore);
+
       if (isStudentInspirationQuery) {
         // Prioriser les résultats de type 'interview'
-        const interviewMatches = filteredMatches.filter((match: any) => match.metadata?.source === 'interview');
-        const otherMatches = filteredMatches.filter((match: any) => match.metadata?.source !== 'interview');
-        
+        const interviewMatches = filteredMatches.filter((match) => match.metadata?.source === 'interview');
+        const otherMatches = filteredMatches.filter((match) => match.metadata?.source !== 'interview');
+
         // Prendre d'abord les interviews, puis les autres
         filteredMatches = [...interviewMatches, ...otherMatches];
       }
-      
+
       // Avec 200k TPM, on peut prendre plus de résultats pour une meilleure précision
       // Pour les requêtes sur étudiants inspirants, prendre plus de résultats et prioriser les interviews
       const maxResults = hasProperName ? 15 : (isStudentInspirationQuery ? 12 : 10); // Plus de résultats
       contexts = filteredMatches
         .slice(0, maxResults)
-        .map((match: any) => match.metadata?.text as string)
+        .map((match) => match.metadata?.text ?? '')
         .filter(Boolean);
       
       // Si on cherche des étudiants inspirants et qu'on n'a pas trouvé d'interviews, essayer une recherche plus large
@@ -173,10 +184,10 @@ export async function searchDocuments(query: string): Promise<string> {
           filter: { source: { $eq: 'interview' } }, // Filtrer uniquement les interviews
         });
         
-        const interviewContexts = interviewSearchResults.matches
-          .filter((match: any) => match.score && match.score >= 0.12) // Seuil plus bas
+        const interviewContexts = (interviewSearchResults.matches as PineconeMatch[])
+          .filter((match) => match.score && match.score >= 0.12) // Seuil plus bas
           .slice(0, 8) // Plus d'interviews
-          .map((match: any) => match.metadata?.text as string)
+          .map((match) => match.metadata?.text ?? '')
           .filter(Boolean);
         
         if (interviewContexts.length > 0) {

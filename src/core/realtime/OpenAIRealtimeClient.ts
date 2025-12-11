@@ -113,16 +113,17 @@ export class OpenAIRealtimeClient {
           logger.warn({ code, reason: reason.toString() }, 'Connexion OpenAI Realtime fermée');
           this.isConnected = false;
           this.sessionConfirmed = false; // Reset sur fermeture
-          
+
           // Notifier les handlers de la fermeture
-          this.handleMessage({
+          const closeEvent: RealtimeEvent = {
             type: 'error',
             error: {
               type: 'connection_closed',
               code: `close_${code}`,
               message: `Connexion fermée: ${reason.toString()}`,
             },
-          } as any);
+          };
+          this.handleMessage(closeEvent);
         });
       } catch (error) {
         reject(new RealtimeConnectionError('Impossible de créer la connexion WebSocket', error as Error));
@@ -140,7 +141,7 @@ export class OpenAIRealtimeClient {
   /**
    * Envoie un événement JSON à OpenAI
    */
-  sendEvent(event: SessionUpdateMessage | InputAudioBufferCommitMessage | InputAudioBufferAppendMessage | any): void {
+  sendEvent(event: SessionUpdateMessage | InputAudioBufferCommitMessage | InputAudioBufferAppendMessage | Record<string, unknown>): void {
     if (!this._ws || !this.isConnected) {
       throw new RealtimeConnectionError('Connexion OpenAI non établie');
     }

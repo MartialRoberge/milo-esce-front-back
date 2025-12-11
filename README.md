@@ -1,347 +1,96 @@
-# OKTI Realtime Backend
+# OKTI - Assistant Vocal Temps Réel ESCE
 
-Backend Node.js/TypeScript pour l'agent vocal intelligent OKTI, utilisant l'API OpenAI Realtime (GA) pour les Journées Portes Ouvertes de l'ESCE.
+Assistant vocal intelligent pour les Journées Portes Ouvertes de l'ESCE, utilisant OpenAI Realtime API avec RAG (Pinecone).
 
-## 📋 Description
-
-OKTI est un assistant vocal en temps réel conçu pour répondre aux questions des étudiants et prospects lors des Journées Portes Ouvertes de l'ESCE. Le système permet une interaction speech-to-speech fluide avec une latence minimale, grâce à l'API OpenAI Realtime.
-
-### Fonctionnalités principales
-
-- **Communication vocale en temps réel** : Interaction speech-to-speech via WebSocket
-- **Recherche documentaire intelligente (RAG)** : Accès à une base de connaissances enrichie (brochures, guides étudiants, conventions de stages, profils LinkedIn)
-- **Personnalité dynamique** : Assistant enjoué et orienté international, adapté au public étudiant
-- **Gestion robuste des erreurs** : Gestion automatique des rate limits et réinitialisation de session
-- **Architecture modulaire** : Code structuré et réutilisable pour d'autres agents
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-src/
-├── server.ts                 # Point d'entrée principal
-├── app/
-│   ├── index.ts              # Configuration Express
-│   ├── httpRoutes/           # Routes HTTP
-│   │   ├── healthRoute.ts
-│   │   ├── sessionRoute.ts   # Création de sessions éphémères
-│   │   └── ragRoute.ts       # Endpoint de recherche RAG
-│   └── wsHandlers/
-│       └── realtimeHandler.ts # Handler WebSocket principal
-├── core/
-│   ├── realtime/             # Client OpenAI Realtime
-│   │   ├── OpenAIRealtimeClient.ts
-│   │   └── types.ts
-│   ├── agents/               # Configuration des agents
-│   │   ├── AgentConfig.ts
-│   │   ├── octiAgent.ts
-│   │   └── esceContext.ts    # Contexte complet ESCE
-│   ├── sessions/             # Gestion des sessions
-│   │   └── SessionManager.ts
-│   └── tools/                 # Outils et fonctions
-│       └── ragSearchTool.ts  # Recherche RAG (Pinecone + OpenAI)
-├── config/                   # Configuration
-│   ├── env.ts
-│   └── logger.ts
-└── utils/                     # Utilitaires
-    ├── wsMessages.ts
-    └── errors.ts
-
-scripts/
-└── ingest.ts                 # Script d'ingestion des documents dans Pinecone
-
-documents/                     # Documents source pour RAG
-├── brochures/
-├── guides/
-├── stages/
-└── linkedin/
+.
+├── src/                    # Backend Node.js/TypeScript
+│   ├── server.ts          # Point d'entrée
+│   ├── app/               # Express + WebSocket handlers
+│   ├── core/              # Realtime client, agents, RAG
+│   └── config/            # Configuration
+├── reference-agents/       # Frontend Next.js
+│   └── src/app/           # Application React
+├── documents/             # Documents pour RAG
+└── scripts/               # Scripts d'ingestion
 ```
 
-## 🚀 Installation
+## Installation
 
-### Prérequis
-
-- Node.js ≥ 20.0.0
-- npm ou yarn
-- Clé API OpenAI
-- (Optionnel) Clé API Pinecone pour la fonctionnalité RAG
-
-### Installation des dépendances
+### Backend
 
 ```bash
 npm install
+npm run build
 ```
 
-### Configuration
-
-1. Copier le fichier d'exemple de configuration :
+### Frontend
 
 ```bash
-cp .env.example .env
+cd reference-agents
+npm install
+npm run build
 ```
 
-2. Éditer le fichier `.env` avec vos variables d'environnement :
+## Configuration
+
+Créer un fichier `.env` à la racine :
 
 ```env
-# Configuration serveur
 PORT=8080
 NODE_ENV=production
-
-# OpenAI
 OPENAI_API_KEY=sk-xxx
-OPENAI_REALTIME_MODEL=gpt-realtime
-
-# Configuration agent OKTI
-OKTI_SYSTEM_PROMPT="Tu es OKTI..."
+OPENAI_REALTIME_MODEL=gpt-realtime-2025-08-28
+OKTI_SYSTEM_PROMPT="Tu es MILO..."
 OKTI_DEFAULT_VOICE=verse
-OKTI_PROMPT_ID=pmpt_xxx  # Optionnel : utiliser un prompt ID
 
-# RAG (Optionnel)
+# RAG (optionnel)
 PINECONE_API_KEY=xxx
 PINECONE_INDEX_NAME=esce-documents
 ```
 
-## 🚀 Guide de démarrage rapide
+Frontend (`reference-agents/.env.local`) :
 
-### 1. Démarrer le backend
+```env
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8080
+OPENAI_API_KEY=sk-xxx
+```
 
-Dans le répertoire racine du projet :
+## Développement
 
 ```bash
+# Backend (port 8080)
 npm run dev
+
+# Frontend (port 3000)
+cd reference-agents && npm run dev
 ```
 
-Le serveur backend démarre sur `http://localhost:8080` avec rechargement automatique.
+## Déploiement Render
 
-**Vérification :** Ouvrez `http://localhost:8080/health` dans votre navigateur. Vous devriez voir :
-```json
-{
-  "status": "ok",
-  "timestamp": "...",
-  "service": "octi-realtime-backend"
-}
-```
+Le fichier `render.yaml` configure deux services :
 
-### 2. Démarrer le frontend de démo (optionnel)
+- **okti-backend** : Backend Node.js sur port 10000
+- **okti-frontend** : Frontend Next.js sur port 10000
 
-Pour tester OKTI avec l'interface de démo Next.js :
+Variables d'environnement requises sur Render :
+- `OPENAI_API_KEY` (backend + frontend)
+- `NEXT_PUBLIC_BACKEND_URL` (frontend) : URL du backend déployé
+- `PINECONE_API_KEY` (backend, optionnel)
 
-```bash
-cd reference-agents
-npm install  # Si ce n'est pas déjà fait
-npm run dev
-```
+## API
 
-Le frontend démarre généralement sur `http://localhost:3000` ou `http://localhost:3001` (selon les ports disponibles).
+- `GET /health` : Health check
+- `GET /api/session` : Créer une session éphémère OpenAI
+- `POST /api/rag/search` : Recherche RAG
+- `WS /ws/realtime` : WebSocket pour audio temps réel
 
-**Accès à la démo :**
-- Ouvrez `http://localhost:3000` (ou le port indiqué dans la console)
-- Sélectionnez le scénario **"octi"** dans le menu déroulant
-- Cliquez sur **"Connect"** pour démarrer la session
-- Autorisez l'accès au microphone si demandé
-- Parlez avec OKTI !
-
-### 3. Utilisation en production
-
-```bash
-npm run build
-npm start
-```
-
-## 🎯 Utilisation
-
-### Développement
-
-```bash
-npm run dev
-```
-
-Le serveur démarre sur `http://localhost:8080` avec rechargement automatique.
-
-### Production
-
-```bash
-npm run build
-npm start
-```
-
-### Ingestion des documents (RAG)
-
-Pour ingérer les documents dans Pinecone :
+## Ingestion RAG
 
 ```bash
 npm run ingest
 ```
 
-Cette commande :
-- Parse les PDFs, fichiers Excel et autres documents dans `documents/`
-- Crée des embeddings via OpenAI
-- Stocke les vecteurs dans Pinecone
-
-## 📡 API
-
-### WebSocket : `/ws/realtime`
-
-Endpoint principal pour la conversation vocale en temps réel.
-
-**URL :** `ws://localhost:8080/ws/realtime`
-
-**Protocole :** Voir [API.md](./API.md) pour la documentation complète du protocole WebSocket.
-
-### HTTP : `/api/session`
-
-Crée une session éphémère OpenAI Realtime pour connexion WebRTC directe.
-
-**Méthode :** `GET`
-
-**Réponse :**
-```json
-{
-  "id": "sess_xxx",
-  "client_secret": {
-    "value": "sk-xxx",
-    "expires_at": 1234567890
-  }
-}
-```
-
-### HTTP : `/api/rag/search`
-
-Effectue une recherche dans la base de connaissances RAG.
-
-**Méthode :** `POST`
-
-**Body :**
-```json
-{
-  "query": "stages en finance"
-}
-```
-
-**Réponse :**
-```json
-{
-  "context": "Contexte pertinent extrait des documents..."
-}
-```
-
-### Health Check : `/health`
-
-Vérifie que le serveur est opérationnel.
-
-**Méthode :** `GET`
-
-**Réponse :**
-```json
-{
-  "status": "ok",
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
-
-## 🔧 Configuration avancée
-
-### Personnalisation de l'agent
-
-La personnalité et le contexte d'OKTI sont définis dans :
-- `src/core/agents/esceContext.ts` : Contexte complet sur l'ESCE
-- `reference-agents/src/app/agentConfigs/octiAgent.ts` : Configuration de l'agent (frontend WebRTC)
-
-### Configuration RAG
-
-Pour activer la recherche documentaire :
-
-1. Créer un index Pinecone (dimensions: 1536, metric: cosine)
-2. Configurer `PINECONE_API_KEY` et `PINECONE_INDEX_NAME` dans `.env`
-3. Placer les documents dans `documents/` (brochures, guides, stages, linkedin)
-4. Exécuter `npm run ingest`
-
-### Gestion des rate limits
-
-Le système gère automatiquement les erreurs de rate limit OpenAI :
-- Détection automatique des erreurs `rate_limit_exceeded`
-- Extraction du temps d'attente depuis le message d'erreur
-- Réinitialisation automatique de la session après le délai
-- Messages d'erreur clairs pour l'utilisateur
-
-### Reconnexion automatique
-
-Le système inclut une gestion robuste des déconnexions :
-- **Reconnexion automatique** : Jusqu'à 5 tentatives avec backoff exponentiel
-- **Surveillance continue** : Vérification de l'état de la connexion toutes les 5 secondes
-- **Détection proactive** : Reconnexion automatique en cas de perte de connexion
-- **Messages informatifs** : L'utilisateur est informé des tentatives de reconnexion
-
-## 📚 Documentation
-
-- **[API.md](./API.md)** : Documentation complète de l'API (WebSocket et HTTP)
-- **[RAG_SETUP.md](./RAG_SETUP.md)** : Guide de configuration RAG
-- **[RAG_ARCHITECTURE.md](./RAG_ARCHITECTURE.md)** : Architecture détaillée du système RAG
-
-## 🛠️ Technologies
-
-- **Node.js** ≥ 20.0.0
-- **TypeScript** 5.3+
-- **Express** : Serveur HTTP
-- **ws** : WebSocket server
-- **OpenAI Realtime API** : Communication vocale en temps réel
-- **Pinecone** : Base de données vectorielle (RAG)
-- **Pino** : Logging structuré
-
-## 📦 Scripts disponibles
-
-```bash
-npm run build          # Compilation TypeScript
-npm run start          # Démarrage en production
-npm run dev            # Démarrage en développement (watch mode)
-npm run type-check     # Vérification des types TypeScript
-npm run ingest         # Ingestion des documents dans Pinecone
-```
-
-## 🔒 Sécurité
-
-- Les clés API ne doivent jamais être commitées dans le repository
-- Le fichier `.env` est ignoré par Git (voir `.gitignore`)
-- Utilisation de variables d'environnement pour toutes les configurations sensibles
-- Validation des entrées utilisateur sur tous les endpoints
-
-## 🐛 Dépannage
-
-### Le serveur ne démarre pas
-
-- Vérifier que `OPENAI_API_KEY` est défini dans `.env`
-- Vérifier que le port 8080 n'est pas déjà utilisé
-- Consulter les logs pour plus de détails
-
-### Erreurs de rate limit
-
-- Le système gère automatiquement les rate limits
-- En cas de limite fréquente, considérer :
-  - Optimiser la taille du contexte (réduire `esceContext.ts`)
-  - Augmenter le quota OpenAI
-  - Limiter le nombre de sessions simultanées
-
-### Problèmes de recherche RAG
-
-- Vérifier que Pinecone est configuré (`PINECONE_API_KEY`)
-- Vérifier que l'index existe et contient des données (`npm run ingest`)
-- Consulter les logs pour les erreurs de recherche
-
-### Le chatbot s'arrête pendant la conversation
-
-Le système inclut une reconnexion automatique, mais si le problème persiste :
-- Vérifier les logs du backend pour identifier l'erreur
-- Vérifier que la connexion WebSocket n'est pas bloquée par un firewall
-- Vérifier que `OPENAI_API_KEY` est valide et n'a pas expiré
-- Le système tente automatiquement de se reconnecter jusqu'à 5 fois
-
-## 📝 Licence
-
-MIT
-
-## 👥 Support
-
-Pour toute question ou problème, consulter la documentation dans `API.md` ou contacter l'équipe de développement.
-
----
-
-**Développé pour les Journées Portes Ouvertes de l'ESCE**
+Ingère les documents de `documents/` dans Pinecone.

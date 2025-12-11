@@ -76,7 +76,8 @@ export function useOutputAudioAnalyzer({
             return;
           }
 
-          analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+          const dataArray = dataArrayRef.current;
+          analyserRef.current.getByteFrequencyData(dataArray as Uint8Array<ArrayBuffer>);
 
           // Calculate average level from frequency data
           let sum = 0;

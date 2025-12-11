@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import gsap from 'gsap';
 
@@ -11,10 +11,9 @@ import type { RealtimeAgent } from '@openai/agents/realtime';
 import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { useEvent } from "@/app/contexts/EventContext";
 import { useRealtimeSession } from "./hooks/useRealtimeSession";
-import { useMiloStore, MILOState } from "./store/useMiloStore";
+import { useMiloStore } from "./store/useMiloStore";
 import { useAudioAnalyzer } from "./hooks/useAudioAnalyzer";
 import { useOutputAudioAnalyzer } from "./hooks/useOutputAudioAnalyzer";
-import { createModerationGuardrail } from "@/app/agentConfigs/guardrails";
 
 // Visual components
 import { ThreeOrb } from "./components/ThreeOrb";
@@ -23,17 +22,9 @@ import { MiloWaveLogo } from "./components/MiloWaveLogo";
 
 // Agent configs
 import { allAgentSets, defaultAgentSetKey } from "@/app/agentConfigs";
-import { customerServiceRetailScenario } from "@/app/agentConfigs/customerServiceRetail";
-import { chatSupervisorScenario } from "@/app/agentConfigs/chatSupervisor";
-import { customerServiceRetailCompanyName } from "@/app/agentConfigs/customerServiceRetail";
-import { chatSupervisorCompanyName } from "@/app/agentConfigs/chatSupervisor";
-import { simpleHandoffScenario } from "@/app/agentConfigs/simpleHandoff";
 
 const sdkScenarioMap: Record<string, RealtimeAgent[]> = {
   octi: allAgentSets.octi,
-  simpleHandoff: simpleHandoffScenario,
-  customerServiceRetail: customerServiceRetailScenario,
-  chatSupervisor: chatSupervisorScenario,
 };
 
 // Simple subtitles - shows full response text when speaking
@@ -187,7 +178,7 @@ function StateHint({ state, sessionStatus }: { state: string; sessionStatus: Ses
 // Main App
 function App() {
   const searchParams = useSearchParams()!;
-  const { transcriptItems, addTranscriptMessage, addTranscriptBreadcrumb } = useTranscript();
+  const { transcriptItems, addTranscriptBreadcrumb } = useTranscript();
   const { logClientEvent, logServerEvent } = useEvent();
 
   // Zustand store for MILO visual state
@@ -195,7 +186,6 @@ function App() {
     state: miloState,
     setState: setMiloState,
     setAudioLevel,
-    depth,
     increaseDepth,
     setInitialized,
     currentTranscript,
@@ -206,7 +196,7 @@ function App() {
   const { audioLevel, isActive: isAudioActive, startListening, stopListening } = useAudioAnalyzer();
 
   const [selectedAgentName, setSelectedAgentName] = useState<string>("");
-  const [selectedAgentConfigSet, setSelectedAgentConfigSet] = useState<RealtimeAgent[] | null>(null);
+  const [, setSelectedAgentConfigSet] = useState<RealtimeAgent[] | null>(null);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("DISCONNECTED");
   const [smoothAudio, setSmoothAudio] = useState(0);
   const [wordPulse, setWordPulse] = useState(0);
@@ -243,8 +233,6 @@ function App() {
 
   const {
     connect,
-    disconnect,
-    sendUserText,
     sendEvent,
     interrupt,
     mute,
@@ -403,16 +391,10 @@ function App() {
           reorderedAgents.unshift(agent);
         }
 
-        const companyName = agentSetKey === 'customerServiceRetail'
-          ? customerServiceRetailCompanyName
-          : chatSupervisorCompanyName;
-        const guardrail = createModerationGuardrail(companyName);
-
         await connect({
           getEphemeralKey: async () => EPHEMERAL_KEY,
           initialAgents: reorderedAgents,
           audioElement: sdkAudioElement,
-          outputGuardrails: [guardrail],
           extraContext: {
             addTranscriptBreadcrumb,
           },
@@ -436,12 +418,6 @@ function App() {
         setSessionStatus("DISCONNECTED");
       }
     }
-  };
-
-  const disconnectFromRealtime = () => {
-    disconnect();
-    setSessionStatus("DISCONNECTED");
-    setMiloState('idle');
   };
 
   // Push to talk handlers

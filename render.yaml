@@ -42,6 +42,8 @@ services:
         sync: false
         # À configurer manuellement avec l'URL du backend après déploiement
         # Format: https://okti-backend.onrender.com
+      - key: OPENAI_API_KEY
+        sync: false
       - key: PORT
         value: 10000
     healthCheckPath: /

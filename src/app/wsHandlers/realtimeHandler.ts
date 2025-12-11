@@ -11,6 +11,7 @@ import {
   createErrorMessage,
 } from '../../utils/wsMessages';
 import {
+  RealtimeEvent,
   ResponseOutputAudioDeltaEvent,
   ResponseOutputAudioTranscriptDeltaEvent,
   ErrorEvent,
@@ -59,7 +60,7 @@ export function realtimeHandler(ws: WebSocket): void {
   /**
    * Gère les événements reçus depuis OpenAI Realtime
    */
-  function handleOpenAIEvent(event: any) {
+  function handleOpenAIEvent(event: RealtimeEvent) {
     try {
       // Logger TOUS les événements pour déboguer
       logger.info({ type: event.type, event: JSON.stringify(event).substring(0, 500) }, 'Événement OpenAI reçu');

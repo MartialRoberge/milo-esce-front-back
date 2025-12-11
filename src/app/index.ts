@@ -1,6 +1,5 @@
-import express, { Express } from 'express';
+import express, { Express, Request, Response, NextFunction } from 'express';
 import healthRoute from './httpRoutes/healthRoute';
-import clientSecretRoute from './httpRoutes/clientSecretRoute';
 import sessionRoute from './httpRoutes/sessionRoute';
 import ragRoute from './httpRoutes/ragRoute';
 import { logger } from '../config/logger';
@@ -15,7 +14,7 @@ export function createApp(): Express {
   app.use(express.json());
 
   // CORS pour permettre les requêtes depuis le frontend
-  app.use((req, res, next) => {
+  app.use((req: Request, res: Response, next: NextFunction) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type');
@@ -27,13 +26,12 @@ export function createApp(): Express {
   });
 
   // Routes HTTP
-      app.use('/', healthRoute);
-      app.use('/api', clientSecretRoute);
-      app.use('/api', sessionRoute);
-      app.use('/api/rag', ragRoute);
+  app.use('/', healthRoute);
+  app.use('/api', sessionRoute);
+  app.use('/api/rag', ragRoute);
 
   // Log des requêtes
-  app.use((req, _res, next) => {
+  app.use((req: Request, _res: Response, next: NextFunction) => {
     logger.debug({ method: req.method, path: req.path }, 'Requête HTTP');
     next();
   });
