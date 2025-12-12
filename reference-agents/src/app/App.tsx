@@ -156,7 +156,11 @@ function App() {
     increaseDepth,
     setInitialized,
     currentTranscript,
-    setCurrentTranscript
+    setCurrentTranscript,
+    currentMessageId,
+    setCurrentMessageId,
+    clearCurrentResponse,
+    responseStartedAt
   } = useMiloStore();
 
   // Audio analyzer for visual feedback (mic input)
@@ -206,8 +210,9 @@ function App() {
       setSelectedAgentName(agentName);
     },
     onResponseStart: () => {
-      // MILO started generating response
+      // MILO started generating response - clear previous subtitle and message ID
       if (sessionStatus === 'CONNECTED') {
+        clearCurrentResponse(); // Efface transcript ET messageId pour éviter réaffichage
         setMiloState('speaking');
         increaseDepth();
       }
@@ -221,8 +226,7 @@ function App() {
       console.log('[MILO] Audio started');
       if (sessionStatus === 'CONNECTED' && miloState !== 'listening') {
         setMiloState('speaking');
-        // Clear previous transcript to avoid flash of old subtitle
-        setCurrentTranscript('');
+        // Ne pas effacer ici - onResponseStart s'en charge déjà
       }
     },
     onAudioStopped: () => {
@@ -284,17 +288,33 @@ function App() {
 
   // Watch transcript for subtitles display (state is now managed by response events)
   useEffect(() => {
+    // Filtrer les messages assistant créés APRÈS le début de la nouvelle réponse
     const assistantMessages = transcriptItems
-      .filter(item => item.type === 'MESSAGE' && item.role === 'assistant')
+      .filter(item =>
+        item.type === 'MESSAGE' &&
+        item.role === 'assistant' &&
+        item.createdAtMs > responseStartedAt // Ignorer les anciens messages
+      )
       .sort((a, b) => b.createdAtMs - a.createdAtMs);
 
     if (assistantMessages.length > 0) {
       const latestMessage = assistantMessages[0];
-      if (latestMessage.title && latestMessage.title !== currentTranscript) {
-        setCurrentTranscript(latestMessage.title);
+
+      // Nouveau message ou mise à jour d'un message existant
+      if (currentMessageId === null || latestMessage.itemId !== currentMessageId) {
+        // Nouveau message détecté
+        if (latestMessage.title) {
+          setCurrentMessageId(latestMessage.itemId);
+          setCurrentTranscript(latestMessage.title);
+        }
+      } else if (latestMessage.itemId === currentMessageId) {
+        // Même message, mise à jour du texte (delta)
+        if (latestMessage.title && latestMessage.title !== currentTranscript) {
+          setCurrentTranscript(latestMessage.title);
+        }
       }
     }
-  }, [transcriptItems, currentTranscript, setCurrentTranscript]);
+  }, [transcriptItems, currentTranscript, currentMessageId, responseStartedAt, setCurrentTranscript, setCurrentMessageId]);
 
   // Agent config setup
   useEffect(() => {
