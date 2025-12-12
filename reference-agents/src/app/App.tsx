@@ -481,7 +481,7 @@ function App() {
       </div>
 
       {/* MILO Logo with wave effect */}
-      <MiloWaveLogo state={miloState} audioLevel={smoothAudio} />
+      <MiloWaveLogo />
 
       {/* Three.js Orb - the main visual element */}
       <ThreeOrb state={miloState} audioLevel={smoothAudio} />
